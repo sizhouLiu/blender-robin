@@ -1,0 +1,16 @@
+[project]
+name = "blender-robin"
+version = "0.1.0"
+description = "Blender rendering scripts"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "click>=8.1",
+    "tomli-w>=1.0",
+]
+
+[project.scripts]
+robin = "blender_robin.cli:cli"
+
+[tool.uv]
+package = true

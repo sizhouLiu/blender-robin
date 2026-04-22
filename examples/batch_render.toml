@@ -1,0 +1,26 @@
+# Batch render multiple .blend files
+[batch]
+output_dir = "C:/renders"
+output_format = "PNG"
+
+[batch.defaults]
+engine = "CYCLES"
+device = "GPU"
+samples = 128
+resolution_x = 1920
+resolution_y = 1080
+
+[[batch.jobs]]
+blend_file = "C:/projects/scene_a.blend"
+frames = "1-100"
+
+[[batch.jobs]]
+blend_file = "C:/projects/scene_b.blend"
+frames = "1-50"
+samples = 256
+
+[[batch.jobs]]
+blend_file = "C:/projects/scene_c.blend"
+scene = "CloseUp"
+frames = "1-30"
+output_format = "EXR"

@@ -1,0 +1,20 @@
+# UV Checker Rendering Example
+
+[batch]
+output_dir = "./uv_check_output"
+
+[batch.defaults]
+engine = "BLENDER_EEVEE_NEXT"
+resolution_x = 1920
+resolution_y = 1080
+use_script = true
+script_name = "uv_checker.py"
+
+[[batch.jobs]]
+blend_file = "model1.blend"
+
+[[batch.jobs]]
+blend_file = "model2.blend"
+
+# Script options can be added per-job
+# script_options = { style = "checker", scale = 16.0 }

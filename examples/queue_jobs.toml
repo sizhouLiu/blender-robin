@@ -1,0 +1,26 @@
+# Render queue job definitions
+[queue]
+db_path = "render_queue.db"
+
+[[queue.jobs]]
+blend_file = "C:/projects/hero_shot.blend"
+priority = 10
+frames = "1-1"
+engine = "CYCLES"
+samples = 512
+output_dir = "C:/renders/hero"
+
+[[queue.jobs]]
+blend_file = "C:/projects/wide_shot.blend"
+priority = 5
+frames = "1-250"
+engine = "CYCLES"
+samples = 128
+output_dir = "C:/renders/wide"
+
+[[queue.jobs]]
+blend_file = "C:/projects/closeup.blend"
+priority = 1
+frames = "1-60"
+engine = "BLENDER_EEVEE_NEXT"
+output_dir = "C:/renders/closeup"

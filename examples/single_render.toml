@@ -1,0 +1,21 @@
+# Single render job
+[render]
+blend_file = "C:/projects/my_scene.blend"
+output_dir = "C:/renders/my_scene"
+output_format = "PNG"
+filename_pattern = "frame_####"
+
+[render.resolution]
+x = 1920
+y = 1080
+percentage = 100
+
+[render.engine]
+name = "CYCLES"
+device = "GPU"
+samples = 256
+
+[render.frames]
+start = 1
+end = 250
+step = 1
