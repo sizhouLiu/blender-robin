@@ -280,6 +280,64 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
         click.echo(f"  [{status}] {r.blend_file.name}")
 
 
+# ── wireframe ───────────────────────────────────────────────────────────
+
+@cli.command("wireframe")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="./wireframe_output", help="Output directory.")
+@click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@click.option("--wire-size", type=float, default=1.5, help="Wireframe line thickness in pixels.")
+@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
+@click.option("--dry-run", is_flag=True, help="Print commands without executing.")
+@click.pass_context
+def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+              wire_size: float, pattern: str, parallel: int, dry_run: bool) -> None:
+    """Render wireframe-on-white for all GLB/GLTF files."""
+    output_dir = Path(output)
+    dir_path = Path(directory)
+
+    model_files = sorted(dir_path.glob(pattern))
+    if not model_files:
+        click.echo(f"No files matching '{pattern}' found in {directory}")
+        return
+
+    configs = []
+    for model_file in model_files:
+        cfg = RenderConfig(
+            blend_file=model_file,
+            output_dir=output_dir,
+            engine="BLENDER_EEVEE_NEXT",
+            resolution_x=resolution[0],
+            resolution_y=resolution[1],
+            use_script=True,
+            script_name="wireframe.py",
+            filename_pattern=model_file.stem,
+            script_options={"glb_file": str(model_file), "wire_size": wire_size},
+        )
+        configs.append(cfg)
+
+    renderer = _get_renderer(ctx, with_progress=False)
+
+    if dry_run:
+        for cfg in configs:
+            cmd = renderer.build_command(cfg)
+            click.echo(" ".join(cmd))
+        return
+
+    click.echo(f"Wireframe rendering {len(configs)} file(s)...")
+    processor = BatchProcessor(renderer, max_parallel=parallel)
+    result = processor.process(configs)
+    click.echo()
+    click.echo(
+        f"Done. {result.succeeded}/{result.total} succeeded, "
+        f"{result.failed} failed, {result.elapsed_seconds:.1f}s total"
+    )
+    for r in result.results:
+        status = "OK" if r.success else "FAIL"
+        click.echo(f"  [{status}] {r.blend_file.name}")
+
+
 # ── queue ───────────────────────────────────────────────────────────────
 
 @cli.group()
