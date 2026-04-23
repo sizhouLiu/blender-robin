@@ -1,7 +1,7 @@
 """
-Blender script for wireframe-on-white rendering from GLB/GLTF files.
+Blender script for white clay (white model) rendering from GLB/GLTF files.
 Runs INSIDE Blender's Python interpreter.
-Invoked via: blender --background --python wireframe.py -- <json_config>
+Invoked via: blender --background --python clay.py -- <json_config>
 """
 import json
 import math
@@ -15,46 +15,27 @@ def import_glb(filepath):
     bpy.ops.object.delete(use_global=False)
 
     bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"Wireframe: imported {filepath}")
+    print(f"Clay: imported {filepath}")
 
 
-def create_wireframe_material():
-    """White base + black wireframe overlay using Wireframe node."""
+def create_clay_material():
     import bpy
 
-    mat = bpy.data.materials.new(name="Wireframe_White")
+    mat = bpy.data.materials.new(name="Clay_White")
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
 
     output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (600, 0)
+    output.location = (300, 0)
 
-    # White base shader
-    white_bsdf = nodes.new("ShaderNodeBsdfDiffuse")
-    white_bsdf.inputs["Color"].default_value = (0.9, 0.9, 0.9, 1.0)
-    white_bsdf.location = (0, 100)
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Base Color"].default_value = (0.85, 0.85, 0.85, 1.0)
+    bsdf.inputs["Roughness"].default_value = 0.6
+    bsdf.location = (0, 0)
 
-    # Black wireframe shader
-    wire_bsdf = nodes.new("ShaderNodeBsdfDiffuse")
-    wire_bsdf.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
-    wire_bsdf.location = (0, -100)
-
-    # Wireframe node as mix factor
-    wireframe = nodes.new("ShaderNodeWireframe")
-    wireframe.inputs["Size"].default_value = 1.5
-    wireframe.use_pixel_size = True
-    wireframe.location = (-200, -200)
-
-    # Mix: white where no wire, black on wire edges
-    mix = nodes.new("ShaderNodeMixShader")
-    mix.location = (300, 0)
-
-    links.new(wireframe.outputs["Fac"], mix.inputs["Fac"])
-    links.new(white_bsdf.outputs["BSDF"], mix.inputs[1])
-    links.new(wire_bsdf.outputs["BSDF"], mix.inputs[2])
-    links.new(mix.outputs["Shader"], output.inputs["Surface"])
+    links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
     return mat
 
@@ -70,7 +51,7 @@ def apply_material_to_meshes(material):
         obj.data.materials.append(material)
         applied += 1
 
-    print(f"Wireframe: applied to {applied} mesh(es)")
+    print(f"Clay: applied to {applied} mesh(es)")
     return applied
 
 
@@ -101,8 +82,8 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
 
     camera = scene.camera
     if not camera:
-        cam_data = bpy.data.cameras.new("Wire_Camera")
-        camera = bpy.data.objects.new("Wire_Camera", cam_data)
+        cam_data = bpy.data.cameras.new("Clay_Camera")
+        camera = bpy.data.objects.new("Clay_Camera", cam_data)
         scene.collection.objects.link(camera)
         scene.camera = camera
 
@@ -111,29 +92,35 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     cam_data.clip_end = 100000
 
     aspect = resolution_x / resolution_y
-    fov = cam_data.angle
+    fov = cam_data.angle  # horizontal FOV
 
+    # Camera direction
     direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
 
+    # Project bbox onto camera's local axes to get tight framing
+    # Camera right = direction x world_up, camera up = right x direction
     cam_forward = -direction
     world_up = mathutils.Vector((0, 0, 1))
     cam_right = cam_forward.cross(world_up).normalized()
     cam_up = cam_right.cross(cam_forward).normalized()
 
+    # Half-extents of bbox
     hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
     corners = [
         mathutils.Vector((sx * hx, sy * hy, sz * hz))
         for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
     ]
 
+    # Find max projected extent on camera right and up axes
     max_right = max(abs(c.dot(cam_right)) for c in corners)
     max_up = max(abs(c.dot(cam_up)) for c in corners)
 
+    # Distance needed to fit horizontally and vertically
     dist_h = max_right / math.tan(fov / 2)
     vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
     dist_v = max_up / math.tan(vfov / 2)
 
-    distance = max(dist_h, dist_v) * 1.02
+    distance = max(dist_h, dist_v) * 1.02  # 2% padding
 
     camera.location = center + direction * distance
 
@@ -142,7 +129,6 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     camera.rotation_euler = rot_quat.to_euler()
 
     cam_data.clip_end = max(cam_data.clip_end, distance * 3)
-    return camera
 
 
 def ensure_lighting(scene):
@@ -153,15 +139,17 @@ def ensure_lighting(scene):
     if has_light:
         return
 
-    light_data = bpy.data.lights.new(name="Wire_Sun", type="SUN")
-    light_data.energy = 3.0
-    light_obj = bpy.data.objects.new("Wire_Sun", light_data)
-    light_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
-    scene.collection.objects.link(light_obj)
+    # Key light
+    key = bpy.data.lights.new(name="Clay_Key", type="SUN")
+    key.energy = 3.0
+    key_obj = bpy.data.objects.new("Clay_Key", key)
+    key_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
+    scene.collection.objects.link(key_obj)
 
-    fill_data = bpy.data.lights.new(name="Wire_Fill", type="SUN")
-    fill_data.energy = 1.5
-    fill_obj = bpy.data.objects.new("Wire_Fill", fill_data)
+    # Fill light
+    fill = bpy.data.lights.new(name="Clay_Fill", type="SUN")
+    fill.energy = 1.5
+    fill_obj = bpy.data.objects.new("Clay_Fill", fill)
     fill_obj.rotation_euler = mathutils.Euler((-0.5, -0.8, -0.3))
     scene.collection.objects.link(fill_obj)
 
@@ -187,37 +175,6 @@ def resolve_engine(name):
     return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
 
 
-def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
-    """Frame a closeup region, same as rgb_closeup logic."""
-    import mathutils
-
-    cam_data = camera.data
-    radius = bbox_size.length / 2.0
-    aspect = resolution_x / resolution_y
-    fov = cam_data.angle
-
-    if aspect >= 1.0:
-        vfov = 2.0 * math.atan(math.tan(fov / 2.0) / aspect)
-    else:
-        vfov = fov
-
-    half_angle = min(fov / 2.0, vfov / 2.0)
-    distance = radius / math.sin(half_angle) * 1.15
-
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
-    camera.location = center + direction * distance
-
-    look_dir = center - camera.location
-    rot_quat = look_dir.to_track_quat('-Z', 'Y')
-    camera.rotation_euler = rot_quat.to_euler()
-
-    cam_data.clip_start = max(0.001, distance * 0.01)
-    cam_data.clip_end = distance * 5
-
-    print(f"Wireframe: closeup, bbox size {bbox_size.length:.2f}, distance {distance:.2f}")
-    return camera
-
-
 def main() -> None:
     import bpy
 
@@ -230,16 +187,10 @@ def main() -> None:
     if glb_file:
         import_glb(glb_file)
     else:
-        print("Wireframe: Warning - no glb_file specified")
+        print("Clay: Warning - no glb_file specified")
         return
 
-    # Create and apply wireframe material
-    wire_size = opts.get("wire_size", 1.5)
-    material = create_wireframe_material()
-    for node in material.node_tree.nodes:
-        if node.type == "WIREFRAME":
-            node.inputs["Size"].default_value = wire_size
-            node.use_pixel_size = True
+    material = create_clay_material()
     apply_material_to_meshes(material)
 
     scene = bpy.context.scene
@@ -261,60 +212,33 @@ def main() -> None:
         if samples is not None:
             scene.eevee.taa_render_samples = samples
 
-    # White background
+    # Light gray background for ambient lighting
     world = scene.world
     if not world:
-        world = bpy.data.worlds.new("Wire_World")
+        world = bpy.data.worlds.new("Clay_World")
         scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
     if bg:
-        bg.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1.0)
+        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
     mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
     if not mesh_objects:
-        print("Wireframe: no mesh objects found")
+        print("Clay: no mesh objects found")
         return
 
     center, bbox_size = get_bounding_box(mesh_objects)
-    camera = setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+    setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
     ensure_lighting(scene)
 
-    output_dir = config.get("output_dir", "./wireframe_output")
+    output_dir = config.get("output_dir", "./clay_output")
     base_name = config.get("filename_pattern", "render")
-
-    # --- Render 1: Full body ---
     render.filepath = f"{output_dir}/{base_name}"
+
     scene.frame_set(1)
     bpy.ops.render.render(write_still=True)
-    print(f"Wireframe: full body rendered to {render.filepath}")
-
-    # --- Render 2: Random region closeup ---
-    import random
-    import mathutils
-
-    bbox_diagonal = bbox_size.length
-    closeup_ratio = 0.10
-    sub_radius = bbox_diagonal * closeup_ratio / 2.0
-
-    verts_world = []
-    for obj in mesh_objects:
-        mat = obj.matrix_world
-        for v in obj.data.vertices:
-            verts_world.append(mat @ v.co)
-
-    if verts_world:
-        focus_point = random.choice(verts_world)
-    else:
-        focus_point = center
-
-    sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
-    print(f"Wireframe: closeup at ({focus_point.x:.2f}, {focus_point.y:.2f}, {focus_point.z:.2f})")
-    setup_closeup_camera(camera, focus_point, sub_bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}2"
-    bpy.ops.render.render(write_still=True)
-    print(f"Wireframe: closeup rendered to {render.filepath}")
+    print(f"Clay: rendered to {render.filepath}")
 
 
 if __name__ == "__main__":

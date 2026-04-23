@@ -178,6 +178,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
     """Render UV checker maps for all GLB/GLTF files in a directory."""
     output_dir = Path(output)
     dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
     # Discover GLB/GLTF files
     model_files = sorted(dir_path.glob(pattern))
@@ -186,16 +187,17 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
         return
 
     configs = []
-    for model_file in model_files:
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
         cfg = RenderConfig(
             blend_file=model_file,
-            output_dir=output_dir,
+            output_dir=case_dir,
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
             use_script=True,
             script_name="uv_checker_glb.py",
-            filename_pattern=model_file.stem,
+            filename_pattern="checkerboard",
             script_options={"style": style, "scale": scale},
         )
         # Pass GLB file path through config
@@ -238,6 +240,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
     output_dir = Path(output)
     dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
     model_files = sorted(dir_path.glob(pattern))
     if not model_files:
@@ -245,16 +248,17 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
         return
 
     configs = []
-    for model_file in model_files:
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
         cfg = RenderConfig(
             blend_file=model_file,
-            output_dir=output_dir,
+            output_dir=case_dir,
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
             use_script=True,
             script_name="rgb_closeup.py",
-            filename_pattern=model_file.stem,
+            filename_pattern="texture_fidelity",
             script_options={"glb_file": str(model_file)},
         )
         configs.append(cfg)
@@ -296,6 +300,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
     """Render wireframe-on-white for all GLB/GLTF files."""
     output_dir = Path(output)
     dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
     model_files = sorted(dir_path.glob(pattern))
     if not model_files:
@@ -303,16 +308,17 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
         return
 
     configs = []
-    for model_file in model_files:
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
         cfg = RenderConfig(
             blend_file=model_file,
-            output_dir=output_dir,
+            output_dir=case_dir,
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
             use_script=True,
             script_name="wireframe.py",
-            filename_pattern=model_file.stem,
+            filename_pattern="topology",
             script_options={"glb_file": str(model_file), "wire_size": wire_size},
         )
         configs.append(cfg)
@@ -326,6 +332,65 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
         return
 
     click.echo(f"Wireframe rendering {len(configs)} file(s)...")
+    processor = BatchProcessor(renderer, max_parallel=parallel)
+    result = processor.process(configs)
+    click.echo()
+    click.echo(
+        f"Done. {result.succeeded}/{result.total} succeeded, "
+        f"{result.failed} failed, {result.elapsed_seconds:.1f}s total"
+    )
+    for r in result.results:
+        status = "OK" if r.success else "FAIL"
+        click.echo(f"  [{status}] {r.blend_file.name}")
+
+
+# ── clay ────────────────────────────────────────────────────────────────
+
+@cli.command("clay")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="./clay_output", help="Output directory.")
+@click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
+@click.option("--dry-run", is_flag=True, help="Print commands without executing.")
+@click.pass_context
+def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+         pattern: str, parallel: int, dry_run: bool) -> None:
+    """Render white clay model for all GLB/GLTF files."""
+    output_dir = Path(output)
+    dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
+
+    model_files = sorted(dir_path.glob(pattern))
+    if not model_files:
+        click.echo(f"No files matching '{pattern}' found in {directory}")
+        return
+
+    configs = []
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
+        cfg = RenderConfig(
+            blend_file=model_file,
+            output_dir=case_dir,
+            engine="BLENDER_EEVEE_NEXT",
+            resolution_x=resolution[0],
+            resolution_y=resolution[1],
+            use_script=True,
+            script_name="clay.py",
+            filename_pattern="white_model",
+            script_options={"glb_file": str(model_file)},
+        )
+        configs.append(cfg)
+
+    renderer = _get_renderer(ctx, with_progress=False)
+
+    if dry_run:
+        for cfg in configs:
+            cmd = renderer.build_command(cfg)
+            click.echo(" ".join(cmd))
+        return
+
+    click.echo(f"Clay rendering {len(configs)} file(s)...")
     processor = BatchProcessor(renderer, max_parallel=parallel)
     result = processor.process(configs)
     click.echo()

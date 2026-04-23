@@ -58,19 +58,31 @@ def frame_camera_on_bbox(camera, center, bbox_size, resolution_x, resolution_y):
     import mathutils
 
     cam_data = camera.data
-    radius = bbox_size.length / 2.0
     aspect = resolution_x / resolution_y
     fov = cam_data.angle
 
-    if aspect >= 1.0:
-        vfov = 2.0 * math.atan(math.tan(fov / 2.0) / aspect)
-    else:
-        vfov = fov
-
-    half_angle = min(fov / 2.0, vfov / 2.0)
-    distance = radius / math.sin(half_angle) * 1.1
-
     direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+
+    cam_forward = -direction
+    world_up = mathutils.Vector((0, 0, 1))
+    cam_right = cam_forward.cross(world_up).normalized()
+    cam_up = cam_right.cross(cam_forward).normalized()
+
+    hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
+    corners = [
+        mathutils.Vector((sx * hx, sy * hy, sz * hz))
+        for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
+    ]
+
+    max_right = max(abs(c.dot(cam_right)) for c in corners)
+    max_up = max(abs(c.dot(cam_up)) for c in corners)
+
+    dist_h = max_right / math.tan(fov / 2)
+    vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
+    dist_v = max_up / math.tan(vfov / 2)
+
+    distance = max(dist_h, dist_v) * 1.02
+
     camera.location = center + direction * distance
 
     look_dir = center - camera.location
@@ -179,6 +191,8 @@ def main() -> None:
 
     fmt = config.get("output_format", "PNG")
     render.image_settings.file_format = fmt
+    render.image_settings.color_mode = 'RGBA'
+    render.film_transparent = True
 
     if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
         samples = config.get("samples")
@@ -192,7 +206,7 @@ def main() -> None:
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
     if bg:
-        bg.inputs["Color"].default_value = (0.8, 0.8, 0.8, 1.0)
+        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
     mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
@@ -211,20 +225,17 @@ def main() -> None:
 
     # --- Render 1: Full body ---
     frame_camera_on_bbox(camera, center, bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}_full"
+    render.filepath = f"{output_dir}/{base_name}"
     scene.frame_set(1)
     bpy.ops.render.render(write_still=True)
     print(f"RGB Closeup: full body rendered to {render.filepath}")
 
     # --- Render 2: Random region closeup ---
-    # Pick a random sub-region of the model's bounding box (about 25% of the diagonal)
     import mathutils
 
     closeup_ratio = 0.10
     sub_radius = bbox_diagonal * closeup_ratio / 2.0
 
-    # Random point inside the bounding box (biased toward mesh-dense areas)
-    # Sample a random vertex from a random mesh object
     verts_world = []
     for obj in mesh_objects:
         mesh = obj.data
@@ -237,11 +248,10 @@ def main() -> None:
     else:
         focus_point = center
 
-    # Create a virtual sub-bbox around the focus point
     sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
     print(f"RGB Closeup: focus region at ({focus_point.x:.2f}, {focus_point.y:.2f}, {focus_point.z:.2f})")
     setup_closeup_camera(camera, focus_point, sub_bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}_closeup"
+    render.filepath = f"{output_dir}/{base_name}2"
     bpy.ops.render.render(write_still=True)
     print(f"RGB Closeup: closeup rendered to {render.filepath}")
 

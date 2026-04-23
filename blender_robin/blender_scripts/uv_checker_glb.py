@@ -246,7 +246,6 @@ def setup_camera_and_lighting():
     center = (min_co + max_co) / 2
     bbox_size = max_co - min_co
 
-    # Create or reuse camera
     camera = scene.camera
     if not camera:
         cam_data = bpy.data.cameras.new("UV_Check_Camera")
@@ -258,37 +257,37 @@ def setup_camera_and_lighting():
     cam_data.clip_start = 0.01
     cam_data.clip_end = 10000
 
-    # Camera direction: 45 degrees from front-right, slightly above
+    aspect = scene.render.resolution_x / scene.render.resolution_y
+    fov = cam_data.angle
+
     direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
 
-    # Calculate the bounding sphere radius (half-diagonal of bounding box)
-    radius = bbox_size.length / 2.0
+    cam_forward = -direction
+    world_up = mathutils.Vector((0, 0, 1))
+    cam_right = cam_forward.cross(world_up).normalized()
+    cam_up = cam_right.cross(cam_forward).normalized()
 
-    # Calculate distance based on camera FOV so the model fills the frame
-    # Use the vertical FOV and aspect ratio to determine the tighter constraint
-    aspect = scene.render.resolution_x / scene.render.resolution_y
-    fov = cam_data.angle  # horizontal FOV in radians
+    hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
+    corners = [
+        mathutils.Vector((sx * hx, sy * hy, sz * hz))
+        for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
+    ]
 
-    if aspect >= 1.0:
-        # Landscape: vertical FOV is tighter
-        vfov = 2.0 * math.atan(math.tan(fov / 2.0) / aspect)
-    else:
-        vfov = fov
+    max_right = max(abs(c.dot(cam_right)) for c in corners)
+    max_up = max(abs(c.dot(cam_up)) for c in corners)
 
-    half_angle = min(fov / 2.0, vfov / 2.0)
-    distance = radius / math.sin(half_angle)
+    dist_h = max_right / math.tan(fov / 2)
+    vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
+    dist_v = max_up / math.tan(vfov / 2)
 
-    # Add 10% padding so model doesn't touch the edges
-    distance *= 1.1
+    distance = max(dist_h, dist_v) * 1.02
 
     camera.location = center + direction * distance
 
-    # Point camera at center
     look_dir = center - camera.location
     rot_quat = look_dir.to_track_quat('-Z', 'Y')
     camera.rotation_euler = rot_quat.to_euler()
 
-    # Ensure clip_end covers the distance
     cam_data.clip_end = max(cam_data.clip_end, distance * 3)
 
     print(f"UV Checker: camera at distance {distance:.2f}, bbox size {bbox_size.length:.2f}")
@@ -365,6 +364,8 @@ def main() -> None:
 
     fmt = config.get("output_format", "PNG")
     render.image_settings.file_format = fmt
+    render.image_settings.color_mode = 'RGBA'
+    render.film_transparent = True
 
     output_dir = config.get("output_dir", "./uv_check_output")
     filename_pattern = config.get("filename_pattern", "uv_check")
@@ -383,7 +384,7 @@ def main() -> None:
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
     if bg:
-        bg.inputs["Color"].default_value = (0.8, 0.8, 0.8, 1.0)
+        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
     scene.frame_set(1)

@@ -12,5 +12,8 @@ dependencies = [
 [project.scripts]
 robin = "blender_robin.cli:cli"
 
+[tool.setuptools.packages.find]
+include = ["blender_robin*"]
+
 [tool.uv]
 package = true
