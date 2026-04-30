@@ -215,45 +215,21 @@ def main() -> None:
         return
 
     center, bbox_size = get_bounding_box(mesh_objects)
-    bbox_diagonal = bbox_size.length
 
     camera = ensure_camera(scene)
     ensure_lighting(scene)
 
-    output_dir = config.get("output_dir", "./rgb_output")
-    base_name = config.get("filename_pattern", "render")
+    def _setup_cam(sc, c, bs, rx, ry):
+        cam = ensure_camera(sc)
+        frame_camera_on_bbox(cam, c, bs, rx, ry)
+        return cam
 
-    # --- Render 1: Full body ---
-    frame_camera_on_bbox(camera, center, bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}"
-    scene.frame_set(1)
-    bpy.ops.render.render(write_still=True)
-    print(f"RGB Closeup: full body rendered to {render.filepath}")
-
-    # --- Render 2: Random region closeup ---
-    import mathutils
-
-    closeup_ratio = 0.10
-    sub_radius = bbox_diagonal * closeup_ratio / 2.0
-
-    verts_world = []
-    for obj in mesh_objects:
-        mesh = obj.data
-        mat = obj.matrix_world
-        for v in mesh.vertices:
-            verts_world.append(mat @ v.co)
-
-    if verts_world:
-        focus_point = random.choice(verts_world)
-    else:
-        focus_point = center
-
-    sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
-    print(f"RGB Closeup: focus region at ({focus_point.x:.2f}, {focus_point.y:.2f}, {focus_point.z:.2f})")
-    setup_closeup_camera(camera, focus_point, sub_bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}2"
-    bpy.ops.render.render(write_still=True)
-    print(f"RGB Closeup: closeup rendered to {render.filepath}")
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.render_multi_view(bpy, scene, _setup_cam, center, bbox_size, opts, config, "RGB")
 
 
 if __name__ == "__main__":

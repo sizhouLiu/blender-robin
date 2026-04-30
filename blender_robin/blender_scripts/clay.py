@@ -232,13 +232,12 @@ def main() -> None:
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
     ensure_lighting(scene)
 
-    output_dir = config.get("output_dir", "./clay_output")
-    base_name = config.get("filename_pattern", "render")
-    render.filepath = f"{output_dir}/{base_name}"
-
-    scene.frame_set(1)
-    bpy.ops.render.render(write_still=True)
-    print(f"Clay: rendered to {render.filepath}")
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Clay")
 
 
 if __name__ == "__main__":

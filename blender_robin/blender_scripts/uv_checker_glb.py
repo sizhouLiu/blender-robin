@@ -387,9 +387,66 @@ def main() -> None:
         bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
-    scene.frame_set(1)
-    bpy.ops.render.render(write_still=True)
-    print(f"UV Checker: rendered to {render.filepath}")
+    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+    if not mesh_objects:
+        print("UV Checker: no mesh objects found")
+        return
+
+    min_co = __import__('mathutils').Vector((float('inf'), float('inf'), float('inf')))
+    max_co = __import__('mathutils').Vector((float('-inf'), float('-inf'), float('-inf')))
+    for obj in mesh_objects:
+        for corner in obj.bound_box:
+            wc = obj.matrix_world @ __import__('mathutils').Vector(corner)
+            min_co.x = min(min_co.x, wc.x)
+            min_co.y = min(min_co.y, wc.y)
+            min_co.z = min(min_co.z, wc.z)
+            max_co.x = max(max_co.x, wc.x)
+            max_co.y = max(max_co.y, wc.y)
+            max_co.z = max(max_co.z, wc.z)
+    center = (min_co + max_co) / 2
+    bbox_size = max_co - min_co
+
+    setup_camera_and_lighting()
+
+    def _setup_uv_cam(sc, c, bs, rx, ry):
+        import math as m
+        import mathutils as mu
+        camera = sc.camera
+        if not camera:
+            cd = bpy.data.cameras.new("UV_Cam")
+            camera = bpy.data.objects.new("UV_Cam", cd)
+            sc.collection.objects.link(camera)
+            sc.camera = camera
+        cd = camera.data
+        cd.clip_start = 0.01
+        cd.clip_end = 100000
+        aspect = rx / ry
+        fov = cd.angle
+        direction = mu.Vector((1.0, -1.0, 0.6)).normalized()
+        cam_forward = -direction
+        world_up = mu.Vector((0, 0, 1))
+        cam_right = cam_forward.cross(world_up).normalized()
+        cam_up = cam_right.cross(cam_forward).normalized()
+        hx, hy, hz = bs.x / 2, bs.y / 2, bs.z / 2
+        corners = [mu.Vector((sx*hx, sy*hy, sz*hz)) for sx in (-1,1) for sy in (-1,1) for sz in (-1,1)]
+        max_right = max(abs(co.dot(cam_right)) for co in corners)
+        max_up_val = max(abs(co.dot(cam_up)) for co in corners)
+        dist_h = max_right / m.tan(fov / 2)
+        vfov = 2 * m.atan(m.tan(fov / 2) / aspect)
+        dist_v = max_up_val / m.tan(vfov / 2)
+        distance = max(dist_h, dist_v) * 1.02
+        camera.location = c + direction * distance
+        look_dir = c - camera.location
+        rot_quat = look_dir.to_track_quat('-Z', 'Y')
+        camera.rotation_euler = rot_quat.to_euler()
+        cd.clip_end = max(cd.clip_end, distance * 3)
+
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.render_multi_view(bpy, scene, _setup_uv_cam, center, bbox_size, opts, config, "UV Checker")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,33 @@
+{
+  "blender_path": "D:\\blender.exe",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "clay": {
+    "views": [
+      "diagonal",
+      "front",
+      "back",
+      "left",
+      "right",
+      "top",
+      "bottom",
+      "diagonal_back"
+    ],
+    "composite": true
+  },
+  "rgb": {
+    "full_body": true,
+    "closeup_count": 1
+  },
+  "wireframe": {
+    "full_body": true,
+    "closeup_count": 1
+  },
+  "uv": {
+    "style": "color_grid"
+  },
+  "closeup_count": 3,
+  "uv_style": "color_grid"
+}

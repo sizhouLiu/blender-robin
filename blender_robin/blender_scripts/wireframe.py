@@ -278,43 +278,15 @@ def main() -> None:
         return
 
     center, bbox_size = get_bounding_box(mesh_objects)
-    camera = setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+    setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
     ensure_lighting(scene)
 
-    output_dir = config.get("output_dir", "./wireframe_output")
-    base_name = config.get("filename_pattern", "render")
-
-    # --- Render 1: Full body ---
-    render.filepath = f"{output_dir}/{base_name}"
-    scene.frame_set(1)
-    bpy.ops.render.render(write_still=True)
-    print(f"Wireframe: full body rendered to {render.filepath}")
-
-    # --- Render 2: Random region closeup ---
-    import random
-    import mathutils
-
-    bbox_diagonal = bbox_size.length
-    closeup_ratio = 0.10
-    sub_radius = bbox_diagonal * closeup_ratio / 2.0
-
-    verts_world = []
-    for obj in mesh_objects:
-        mat = obj.matrix_world
-        for v in obj.data.vertices:
-            verts_world.append(mat @ v.co)
-
-    if verts_world:
-        focus_point = random.choice(verts_world)
-    else:
-        focus_point = center
-
-    sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
-    print(f"Wireframe: closeup at ({focus_point.x:.2f}, {focus_point.y:.2f}, {focus_point.z:.2f})")
-    setup_closeup_camera(camera, focus_point, sub_bbox_size, render.resolution_x, render.resolution_y)
-    render.filepath = f"{output_dir}/{base_name}2"
-    bpy.ops.render.render(write_still=True)
-    print(f"Wireframe: closeup rendered to {render.filepath}")
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Wireframe")
 
 
 if __name__ == "__main__":

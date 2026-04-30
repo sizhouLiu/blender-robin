@@ -16,7 +16,7 @@ def discover_blender() -> Path:
     """Find the Blender executable using multiple strategies."""
     env = os.environ.get("BLENDER_PATH")
     if env:
-        p = Path(env)
+        p = Path(env.strip('"').strip("'"))
         if p.is_file():
             return p
         exe = p / "blender.exe" if p.is_dir() else None

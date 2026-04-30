@@ -160,6 +160,26 @@ def batch(ctx: click.Context, directory: str | None, config_file: str | None,
         click.echo(f"  [{status}] {r.blend_file.name} ({r.frame_count} frames, {r.elapsed_seconds:.1f}s)")
 
 
+def _common_render_options(f):
+    """Shared options for all render commands."""
+    f = click.option("--views", type=str, default=None, help="Comma-separated view list.")(f)
+    f = click.option("--closeup-count", type=int, default=1, help="Number of random closeup shots.")(f)
+    f = click.option("--no-composite", is_flag=True, help="Skip composite image generation.")(f)
+    return f
+
+
+def _build_script_options(glb_file, views, closeup_count, no_composite, **extra):
+    opts = {
+        "glb_file": str(glb_file),
+        "closeup_count": closeup_count,
+        "composite": not no_composite,
+    }
+    if views:
+        opts["views"] = views.split(",")
+    opts.update(extra)
+    return opts
+
+
 # ── uv-check ───────────────────────────────────────────────────────────
 
 @cli.command("uv-check")
@@ -169,18 +189,19 @@ def batch(ctx: click.Context, directory: str | None, config_file: str | None,
 @click.option("--style", type=click.Choice(["color_grid", "checker"], case_sensitive=False),
               default="color_grid", help="UV checker pattern style.")
 @click.option("--scale", type=float, default=8.0, help="Checker scale (only for 'checker' style).")
+@_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-             style: str, scale: float, pattern: str, parallel: int, dry_run: bool) -> None:
+             style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
+             pattern: str, parallel: int, dry_run: bool) -> None:
     """Render UV checker maps for all GLB/GLTF files in a directory."""
     output_dir = Path(output)
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    # Discover GLB/GLTF files
     model_files = sorted(dir_path.glob(pattern))
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
@@ -198,10 +219,11 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
             use_script=True,
             script_name="uv_checker_glb.py",
             filename_pattern="checkerboard",
-            script_options={"style": style, "scale": scale},
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+                style=style, scale=scale,
+            ),
         )
-        # Pass GLB file path through config
-        cfg.script_options["glb_file"] = str(model_file)
         configs.append(cfg)
 
     renderer = _get_renderer(ctx, with_progress=False)
@@ -231,11 +253,13 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.argument("directory", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="./rgb_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+                views: str | None, closeup_count: int, no_composite: bool,
                 pattern: str, parallel: int, dry_run: bool) -> None:
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -259,7 +283,9 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
             use_script=True,
             script_name="rgb_closeup.py",
             filename_pattern="texture_fidelity",
-            script_options={"glb_file": str(model_file)},
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+            ),
         )
         configs.append(cfg)
 
@@ -291,12 +317,14 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 @click.option("--output", "-o", type=click.Path(), default="./wireframe_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @click.option("--wire-size", type=float, default=1.5, help="Wireframe line thickness in pixels.")
+@_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-              wire_size: float, pattern: str, parallel: int, dry_run: bool) -> None:
+              wire_size: float, views: str | None, closeup_count: int, no_composite: bool,
+              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render wireframe-on-white for all GLB/GLTF files."""
     output_dir = Path(output)
     dir_path = Path(directory)
@@ -319,7 +347,10 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
             use_script=True,
             script_name="wireframe.py",
             filename_pattern="topology",
-            script_options={"glb_file": str(model_file), "wire_size": wire_size},
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+                wire_size=wire_size,
+            ),
         )
         configs.append(cfg)
 
@@ -350,11 +381,13 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.argument("directory", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="./clay_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+         views: str | None, closeup_count: int, no_composite: bool,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -378,7 +411,9 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             use_script=True,
             script_name="clay.py",
             filename_pattern="white_model",
-            script_options={"glb_file": str(model_file)},
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+            ),
         )
         configs.append(cfg)
 
