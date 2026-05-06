@@ -3,7 +3,7 @@ name = "blender-robin"
 version = "0.1.0"
 description = "Blender rendering scripts"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "click>=8.1",
     "tomli-w>=1.0",

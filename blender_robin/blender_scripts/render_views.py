@@ -6,6 +6,64 @@ import math
 import random
 
 
+def normalize_model(bpy, target_size=2.0):
+    """
+    Normalize imported model: center at origin and scale to target_size.
+
+    Args:
+        bpy: Blender Python module
+        target_size: Maximum dimension after scaling (default 2.0 Blender units)
+    """
+    import mathutils
+
+    mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    if not mesh_objects:
+        print("Normalize: no mesh objects found")
+        return
+
+    # Compute global bounding box in world space
+    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
+    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
+
+    for obj in mesh_objects:
+        for corner in obj.bound_box:
+            world_corner = obj.matrix_world @ mathutils.Vector(corner)
+            min_co.x = min(min_co.x, world_corner.x)
+            min_co.y = min(min_co.y, world_corner.y)
+            min_co.z = min(min_co.z, world_corner.z)
+            max_co.x = max(max_co.x, world_corner.x)
+            max_co.y = max(max_co.y, world_corner.y)
+            max_co.z = max(max_co.z, world_corner.z)
+
+    center = (min_co + max_co) / 2
+    bbox_size = max_co - min_co
+    max_dim = max(bbox_size.x, bbox_size.y, bbox_size.z)
+
+    if max_dim == 0:
+        print("Normalize: model has zero size, skipping")
+        return
+
+    # Calculate scale factor
+    scale_factor = target_size / max_dim
+
+    # Apply transformations to all mesh objects
+    for obj in mesh_objects:
+        # Translate to center at origin
+        obj.location -= center
+        # Scale uniformly
+        obj.scale *= scale_factor
+        # Apply transforms to make them permanent
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+    bpy.ops.object.transform_apply(location=True, rotation=False, scale=True)
+
+    for obj in mesh_objects:
+        obj.select_set(False)
+
+    print(f"Normalize: centered model and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
+
+
 def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, config, label):
     """Render multiple views + closeups + composite for any render mode."""
     import mathutils

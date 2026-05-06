@@ -180,6 +180,13 @@ def main() -> None:
         print("RGB Closeup: Warning - no glb_file specified")
         return
 
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.normalize_model(bpy)
+
     scene = bpy.context.scene
     render = scene.render
 
@@ -224,11 +231,6 @@ def main() -> None:
         frame_camera_on_bbox(cam, c, bs, rx, ry)
         return cam
 
-    import importlib.util, os
-    spec = importlib.util.spec_from_file_location(
-        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
-    rv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rv)
     rv.render_multi_view(bpy, scene, _setup_cam, center, bbox_size, opts, config, "RGB")
 
 

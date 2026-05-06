@@ -233,6 +233,13 @@ def main() -> None:
         print("Wireframe: Warning - no glb_file specified")
         return
 
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.normalize_model(bpy)
+
     # Create and apply wireframe material
     wire_size = opts.get("wire_size", 1.5)
     material = create_wireframe_material()
@@ -281,11 +288,6 @@ def main() -> None:
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
     ensure_lighting(scene)
 
-    import importlib.util, os
-    spec = importlib.util.spec_from_file_location(
-        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
-    rv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rv)
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Wireframe")
 
 

@@ -339,6 +339,13 @@ def main() -> None:
     else:
         print("UV Checker: Warning - no glb_file specified in script_options")
 
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+    rv.normalize_model(bpy)
+
     style = opts.get("style", "color_grid")
     scale = opts.get("scale", 8.0)
 
@@ -441,11 +448,6 @@ def main() -> None:
         camera.rotation_euler = rot_quat.to_euler()
         cd.clip_end = max(cd.clip_end, distance * 3)
 
-    import importlib.util, os
-    spec = importlib.util.spec_from_file_location(
-        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
-    rv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rv)
     rv.render_multi_view(bpy, scene, _setup_uv_cam, center, bbox_size, opts, config, "UV Checker")
 
 

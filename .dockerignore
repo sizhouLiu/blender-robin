@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.git/
+.gitignore
+*.md
+clay_output/
+rgb_output/
+wireframe_output/
+uv_check_output/
+robin_output/
+*.glb
+*.gltf
+*.blend
+.claude/

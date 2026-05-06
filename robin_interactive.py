@@ -24,6 +24,7 @@ CONFIG_PATH = Path(__file__).parent / "robin_config.json"
 DEFAULT_CONFIG = {
     "blender_path": "",
     "resolution": [1920, 1080],
+    "parallel": 2,
     "views": ["diagonal", "front", "back", "left", "right", "top", "bottom", "diagonal_back"],
     "closeup_count": 1,
     "composite": True,
@@ -61,6 +62,7 @@ RENDER_MODES = [
     ("线框图 (全身 + 特写)", "wireframe"),
     ("白模渲染", "clay"),
     ("全部渲染", "all"),
+    ("← 返回主菜单", "back"),
 ]
 
 
@@ -101,7 +103,6 @@ def select_menu(title, options):
         if key == '\r':  # Enter
             return selected
         if key == '\x1b' or key == '\x00' or key == '\xe0':
-            # Arrow key prefix on Windows
             key2 = msvcrt.getwch()
             if key2 == 'H':  # Up
                 selected = (selected - 1) % total
@@ -109,6 +110,10 @@ def select_menu(title, options):
             elif key2 == 'P':  # Down
                 selected = (selected + 1) % total
                 draw()
+            elif key2 == '\x1b':  # Esc twice — treat as back
+                return -1
+        elif key == '\x1b':  # Single Esc — treat as back
+            return -1
 
 
 def select_folder():
@@ -158,6 +163,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     views = cfg.get("views", [])
     closeup_count = cfg.get("closeup_count", 1)
     composite = cfg.get("composite", True)
+    parallel = cfg.get("parallel", 1)
     args = [
         "--blender", str(blender_path),
         command,
@@ -165,6 +171,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         "-o", str(output_dir),
         "-r", str(resolution[0]), str(resolution[1]),
         "--closeup-count", str(closeup_count),
+        "-j", str(parallel),
     ]
     if views:
         args += ["--views", ",".join(views)]
@@ -185,21 +192,41 @@ def edit_config(cfg):
     all_views = ["diagonal", "front", "back", "left", "right", "top", "bottom", "diagonal_back"]
     while True:
         items = [
+            (f"分辨率: {cfg.get('resolution', [1920,1080])[0]}x{cfg.get('resolution', [1920,1080])[1]}", "resolution"),
             (f"渲染视角数: {len(cfg.get('views', all_views))}", "views"),
             (f"特写数量: {cfg.get('closeup_count', 1)}", "closeup"),
             (f"拼合大图: {'是' if cfg.get('composite', True) else '否'}", "composite"),
+            (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
             ("保存并返回", "save"),
+            ("← 返回 (不保存)", "back"),
         ]
-        idx = select_menu("修改配置 (↑↓ 选择, Enter 修改):", items)
-        _, key = items[idx]
+        idx = select_menu("修改配置 (↑↓ 选择, Enter 修改, Esc 返回):", items)
+        _, key = items[idx] if idx >= 0 else ("", "back")
+
+        if key == "back":
+            return cfg
 
         if key == "save":
             save_config(cfg)
             print(f"\n  {GREEN}配置已保存到 {CONFIG_PATH}{RESET}\n")
             return cfg
 
-        if key == "views":
+        if key == "resolution":
+            cur = cfg.get("resolution", [1920, 1080])
+            sys.stdout.write(f"\n  {CYAN}分辨率 (当前 {cur[0]}x{cur[1]}, 格式如 1920x1080): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            if raw:
+                parts = raw.replace("x", " ").replace("X", " ").replace(",", " ").split()
+                if len(parts) == 2:
+                    try:
+                        cfg["resolution"] = [int(parts[0]), int(parts[1])]
+                        print(f"  {GREEN}已更新{RESET}\n")
+                    except ValueError:
+                        print(f"  {YELLOW}格式不对{RESET}\n")
+
+        elif key == "views":
             current = cfg.get("views", all_views)
             print(f"\n  {CYAN}当前视角: {', '.join(current)}{RESET}")
             print(f"  {DIM}可选: {', '.join(all_views)}{RESET}")
@@ -223,6 +250,14 @@ def edit_config(cfg):
             cfg["composite"] = not cur
             print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
 
+        elif key == "parallel":
+            sys.stdout.write(f"\n  {CYAN}并行渲染数 (当前 {cfg.get('parallel', 1)}, 建议不超过 CPU 核心数): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            if raw.isdigit() and int(raw) >= 1:
+                cfg["parallel"] = int(raw)
+                print(f"  {GREEN}已更新{RESET}\n")
+
         elif key == "uv_style":
             cur = cfg.get("uv_style", "color_grid")
             new = "checker" if cur == "color_grid" else "color_grid"
@@ -232,8 +267,12 @@ def edit_config(cfg):
 
 def do_render(blender, directory, res, cfg):
     """Select render mode and execute."""
-    selected = select_menu("选择渲染模式 (↑↓ 选择, Enter 确认):", RENDER_MODES)
+    selected = select_menu("选择渲染模式 (↑↓ 选择, Enter 确认, Esc 返回):", RENDER_MODES)
+    if selected < 0:
+        return
     mode_name, mode_cmd = RENDER_MODES[selected]
+    if mode_cmd == "back":
+        return
     print(f"\n  已选择: {GREEN}{mode_name}{RESET}\n")
 
     base_output = directory / "robin_output"
@@ -270,12 +309,38 @@ def do_render(blender, directory, res, cfg):
             if count:
                 print(f"  {GREEN}复制 {count} 个文件到 global/{RESET}")
 
+        # RGB 渲染完成后，复制整个 RGB 文件夹为 checkerboard，global 用 checkerboard-global
+        if cmd == "rgb-closeup":
+            import shutil
+            checkerboard_dir = base_output / "checkerboard"
+            if checkerboard_dir.exists():
+                shutil.rmtree(checkerboard_dir)
+            shutil.copytree(output_dir, checkerboard_dir)
+            print(f"  {GREEN}已复制 rgb_closeup/ -> checkerboard/{RESET}")
+
+            # 替换 checkerboard/global 为 checkerboard-global 的内容
+            cb_global_dst = checkerboard_dir / "global"
+            cb_global_src = directory / "checkerboard-global"
+            if cb_global_src.is_dir():
+                if cb_global_dst.exists():
+                    shutil.rmtree(cb_global_dst)
+                cb_global_dst.mkdir(parents=True, exist_ok=True)
+                count = 0
+                for f in cb_global_src.iterdir():
+                    if f.is_file():
+                        shutil.copy2(f, cb_global_dst / f.name)
+                        count += 1
+                if count:
+                    print(f"  {GREEN}复制 {count} 个文件到 checkerboard/global/{RESET}")
+
     print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
     print(f"\n  {GREEN}全部完成!{RESET}")
     print(f"  输出目录: {WHITE}{base_output}{RESET}\n")
 
     while True:
-        action_idx = select_menu("下一步:", AFTER_ACTIONS)
+        action_idx = select_menu("下一步 (Esc 返回主菜单):", AFTER_ACTIONS)
+        if action_idx < 0:
+            return
         _, action = AFTER_ACTIONS[action_idx]
         if action == "open":
             os.startfile(str(base_output))
@@ -345,29 +410,14 @@ def main():
     directory = input_path("模型文件夹路径: ")
     print()
 
-    # Resolution from config
-    default_res = cfg.get("resolution", [1920, 1080])
-    sys.stdout.write(f"{CYAN}分辨率 (直接回车使用 {default_res[0]}x{default_res[1]}): {RESET}")
-    sys.stdout.flush()
-    raw = input().strip()
-    if not raw:
-        res = (default_res[0], default_res[1])
-    else:
-        parts = raw.replace("x", " ").replace("X", " ").replace(",", " ").split()
-        if len(parts) == 2:
-            try:
-                res = (int(parts[0]), int(parts[1]))
-            except ValueError:
-                res = (default_res[0], default_res[1])
-                print(f"  {YELLOW}格式不对，使用默认 {default_res[0]}x{default_res[1]}{RESET}")
-        else:
-            res = (default_res[0], default_res[1])
-            print(f"  {YELLOW}格式不对，使用默认 {default_res[0]}x{default_res[1]}{RESET}")
+    res = tuple(cfg.get("resolution", [1920, 1080]))
     print(f"  分辨率: {WHITE}{res[0]} x {res[1]}{RESET}\n")
 
     # Main menu loop
     while True:
-        idx = select_menu("主菜单:", MAIN_MENU)
+        idx = select_menu("主菜单 (Esc 退出):", MAIN_MENU)
+        if idx < 0:
+            return
         _, action = MAIN_MENU[idx]
         if action == "render":
             print()
