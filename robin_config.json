@@ -1,9 +1,19 @@
 {
   "blender_path": "D:\\blender.exe",
-  "resolution": [1920, 1080],
+  "resolution": [
+    1920,
+    1080
+  ],
   "parallel": 4,
-  "views": ["diagonal", "front", "back", "left", "right", "top", "bottom", "diagonal_back"],
-  "closeup_count": 4,
+  "views": [
+    "diagonal",
+    "front",
+    "back",
+    "left",
+    "right",
+    "top"
+  ],
+  "closeup_count": 2,
   "composite": true,
   "uv_style": "color_grid"
 }

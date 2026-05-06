@@ -9,10 +9,7 @@ import random
 def normalize_model(bpy, target_size=2.0):
     """
     Normalize imported model: center at origin and scale to target_size.
-
-    Args:
-        bpy: Blender Python module
-        target_size: Maximum dimension after scaling (default 2.0 Blender units)
+    Handles parent-child hierarchies by operating on root objects only.
     """
     import mathutils
 
@@ -43,25 +40,21 @@ def normalize_model(bpy, target_size=2.0):
         print("Normalize: model has zero size, skipping")
         return
 
-    # Calculate scale factor
     scale_factor = target_size / max_dim
 
-    # Apply transformations to all mesh objects
-    for obj in mesh_objects:
-        # Translate to center at origin
+    # Find all root objects (no parent) to avoid double-transforming children
+    all_objects = list(bpy.context.scene.objects)
+    root_objects = [obj for obj in all_objects if obj.parent is None]
+
+    # Move roots so that the model center lands at origin, then scale
+    for obj in root_objects:
         obj.location -= center
-        # Scale uniformly
         obj.scale *= scale_factor
-        # Apply transforms to make them permanent
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
 
-    bpy.ops.object.transform_apply(location=True, rotation=False, scale=True)
+    # Force scene update so world matrices are recalculated
+    bpy.context.view_layer.update()
 
-    for obj in mesh_objects:
-        obj.select_set(False)
-
-    print(f"Normalize: centered model and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
+    print(f"Normalize: centered and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
 
 
 def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, config, label):
