@@ -438,6 +438,72 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
         click.echo(f"  [{status}] {r.blend_file.name}")
 
 
+# ── normal-map ──────────────────────────────────────────────────────────
+
+@cli.command("normal-map")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="./normal_map_output", help="Output directory.")
+@click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@click.option("--normal-space", type=click.Choice(["world", "tangent"], case_sensitive=False),
+              default="world", help="Normal space: world or tangent.")
+@_common_render_options
+@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
+@click.option("--dry-run", is_flag=True, help="Print commands without executing.")
+@click.pass_context
+def normal_map(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+               normal_space: str, views: str | None, closeup_count: int, no_composite: bool,
+               pattern: str, parallel: int, dry_run: bool) -> None:
+    """Render surface normal maps for all GLB/GLTF files."""
+    output_dir = Path(output)
+    dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
+
+    model_files = sorted(dir_path.glob(pattern))
+    if not model_files:
+        click.echo(f"No files matching '{pattern}' found in {directory}")
+        return
+
+    configs = []
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
+        cfg = RenderConfig(
+            blend_file=model_file,
+            output_dir=case_dir,
+            engine="BLENDER_EEVEE_NEXT",
+            resolution_x=resolution[0],
+            resolution_y=resolution[1],
+            use_script=True,
+            script_name="normal_map.py",
+            filename_pattern="normal_map",
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+                normal_space=normal_space,
+            ),
+        )
+        configs.append(cfg)
+
+    renderer = _get_renderer(ctx, with_progress=False)
+
+    if dry_run:
+        for cfg in configs:
+            cmd = renderer.build_command(cfg)
+            click.echo(" ".join(cmd))
+        return
+
+    click.echo(f"Normal map rendering {len(configs)} file(s) (space={normal_space})...")
+    processor = BatchProcessor(renderer, max_parallel=parallel)
+    result = processor.process(configs)
+    click.echo()
+    click.echo(
+        f"Done. {result.succeeded}/{result.total} succeeded, "
+        f"{result.failed} failed, {result.elapsed_seconds:.1f}s total"
+    )
+    for r in result.results:
+        status = "OK" if r.success else "FAIL"
+        click.echo(f"  [{status}] {r.blend_file.name}")
+
+
 # ── queue ───────────────────────────────────────────────────────────────
 
 @cli.group()

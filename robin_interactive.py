@@ -61,6 +61,7 @@ RENDER_MODES = [
     ("RGB 全身 + 特写", "rgb-closeup"),
     ("线框图 (全身 + 特写)", "wireframe"),
     ("白模渲染", "clay"),
+    ("法线图", "normal-map"),
     ("全部渲染", "all"),
     ("← 返回主菜单", "back"),
 ]
@@ -179,6 +180,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args.append("--no-composite")
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
+    if command == "normal-map":
+        args += ["--normal-space", cfg.get("normal_space", "world")]
     try:
         cli(args, standalone_mode=False)
     except SystemExit:
@@ -279,7 +282,7 @@ def do_render(blender, directory, res, cfg):
 
     if mode_cmd == "all":
         commands = [("uv-check", "uv_check"), ("rgb-closeup", "rgb_closeup"),
-                    ("wireframe", "wireframe"), ("clay", "clay")]
+                    ("wireframe", "wireframe"), ("clay", "clay"), ("normal-map", "normal_map")]
     else:
         commands = [(mode_cmd, mode_cmd.replace("-", "_"))]
 
@@ -289,6 +292,7 @@ def do_render(blender, directory, res, cfg):
         "rgb-closeup": "rgb-global",
         "wireframe": "wireframe-global",
         "clay": "clay-global",
+        "normal-map": "normal-map-global",
     }
     for cmd, folder in commands:
         output_dir = base_output / folder
