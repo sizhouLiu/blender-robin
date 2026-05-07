@@ -29,6 +29,11 @@ DEFAULT_CONFIG = {
     "closeup_count": 1,
     "composite": True,
     "uv_style": "color_grid",
+    "output_format": "PNG",
+    "hdri_path": "",
+    "env_texture": "",
+    "export_metadata": False,
+    "normal_space": "world",
 }
 
 
@@ -44,12 +49,6 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
 
-AFTER_ACTIONS = [
-    ("继续渲染", "again"),
-    ("打开输出文件夹", "open"),
-    ("返回主菜单", "main"),
-]
-
 MAIN_MENU = [
     ("渲染图片", "render"),
     ("编辑配置", "config"),
@@ -62,6 +61,7 @@ RENDER_MODES = [
     ("线框图 (全身 + 特写)", "wireframe"),
     ("白模渲染", "clay"),
     ("法线图", "normal-map"),
+    ("反照率图 (Albedo)", "albedo"),
     ("全部渲染", "all"),
     ("← 返回主菜单", "back"),
 ]
@@ -165,6 +165,11 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     closeup_count = cfg.get("closeup_count", 1)
     composite = cfg.get("composite", True)
     parallel = cfg.get("parallel", 1)
+    output_format = cfg.get("output_format", "PNG")
+    hdri_path = cfg.get("hdri_path", "")
+    env_texture = cfg.get("env_texture", "")
+    export_metadata = cfg.get("export_metadata", False)
+
     args = [
         "--blender", str(blender_path),
         command,
@@ -173,11 +178,18 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         "-r", str(resolution[0]), str(resolution[1]),
         "--closeup-count", str(closeup_count),
         "-j", str(parallel),
+        "--format", output_format,
     ]
     if views:
         args += ["--views", ",".join(views)]
     if not composite:
         args.append("--no-composite")
+    if hdri_path:
+        args += ["--hdri", hdri_path]
+    if env_texture:
+        args += ["--env-texture", env_texture]
+    if export_metadata:
+        args.append("--export-metadata")
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
     if command == "normal-map":
@@ -201,6 +213,11 @@ def edit_config(cfg):
             (f"拼合大图: {'是' if cfg.get('composite', True) else '否'}", "composite"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
+            (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
+            (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
+            (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
+            (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
+            (f"法线空间: {cfg.get('normal_space', 'world')}", "normal_space"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
         ]
@@ -267,6 +284,82 @@ def edit_config(cfg):
             cfg["uv_style"] = new
             print(f"\n  {GREEN}已切换为: {new}{RESET}\n")
 
+        elif key == "output_format":
+            formats = ["PNG", "JPEG", "WEBP", "EXR", "TIFF", "BMP"]
+            cur = cfg.get("output_format", "PNG")
+            cur_idx = formats.index(cur) if cur in formats else 0
+            new_idx = (cur_idx + 1) % len(formats)
+            cfg["output_format"] = formats[new_idx]
+            print(f"\n  {GREEN}已切换为: {formats[new_idx]}{RESET}\n")
+
+        elif key == "hdri_path":
+            sys.stdout.write(f"\n  {CYAN}HDR 环境贴图文件夹路径 (当前: {cfg.get('hdri_path', '(未设置)')}): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip().strip('"').strip("'")
+            if raw:
+                cfg["hdri_path"] = raw
+                print(f"  {GREEN}已更新{RESET}\n")
+            elif raw == "" and cfg.get("hdri_path"):
+                cfg["hdri_path"] = ""
+                print(f"  {GREEN}已清除{RESET}\n")
+
+        elif key == "env_texture":
+            sys.stdout.write(f"\n  {CYAN}指定环境贴图文件名 (当前: {cfg.get('env_texture', '(自动选择)')}, 留空自动选择): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            cfg["env_texture"] = raw
+            print(f"  {GREEN}已更新{RESET}\n")
+
+        elif key == "export_metadata":
+            cur = cfg.get("export_metadata", False)
+            cfg["export_metadata"] = not cur
+            print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
+
+        elif key == "normal_space":
+            cur = cfg.get("normal_space", "world")
+            new = "tangent" if cur == "world" else "world"
+            cfg["normal_space"] = new
+            print(f"\n  {GREEN}已切换为: {new}{RESET}\n")
+
+
+def clear_render_folders(base_output, commands):
+    """Remove only the subfolders that are about to be re-rendered."""
+    import shutil
+    deleted = 0
+    for _, folder in commands:
+        target = base_output / folder
+        if target.exists():
+            shutil.rmtree(target)
+            deleted += 1
+    # Also clear the checkerboard copy when rgb-closeup is included
+    if any(cmd == "rgb-closeup" for cmd, _ in commands):
+        cb = base_output / "checkerboard"
+        if cb.exists():
+            shutil.rmtree(cb)
+            deleted += 1
+    if deleted:
+        print(f"  {YELLOW}已清空 {deleted} 个旧输出文件夹{RESET}")
+
+
+def zip_render_folders(base_output, commands):
+    """Compress each rendered subfolder into its own zip file."""
+    import shutil
+    zip_files = []
+    for _, folder in commands:
+        target = base_output / folder
+        if target.exists():
+            zip_base = str(base_output / folder)
+            result = shutil.make_archive(zip_base, "zip", root_dir=str(base_output), base_dir=folder)
+            zip_files.append(Path(result))
+    # Also zip checkerboard if rgb-closeup was rendered
+    if any(cmd == "rgb-closeup" for cmd, _ in commands):
+        cb = base_output / "checkerboard"
+        if cb.exists():
+            zip_base = str(base_output / "checkerboard")
+            result = shutil.make_archive(zip_base, "zip", root_dir=str(base_output), base_dir="checkerboard")
+            zip_files.append(Path(result))
+    return zip_files
+
 
 def do_render(blender, directory, res, cfg):
     """Select render mode and execute."""
@@ -282,9 +375,13 @@ def do_render(blender, directory, res, cfg):
 
     if mode_cmd == "all":
         commands = [("uv-check", "uv_check"), ("rgb-closeup", "rgb_closeup"),
-                    ("wireframe", "wireframe"), ("clay", "clay"), ("normal-map", "normal_map")]
+                    ("wireframe", "wireframe"), ("clay", "clay"), ("normal-map", "normal_map"),
+                    ("albedo", "albedo")]
     else:
         commands = [(mode_cmd, mode_cmd.replace("-", "_"))]
+
+    # Clear only the subfolders being re-rendered, leave others untouched
+    clear_render_folders(base_output, commands)
 
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
     global_map = {
@@ -293,6 +390,7 @@ def do_render(blender, directory, res, cfg):
         "wireframe": "wireframe-global",
         "clay": "clay-global",
         "normal-map": "normal-map-global",
+        "albedo": "albedo-global",
     }
     for cmd, folder in commands:
         output_dir = base_output / folder
@@ -341,11 +439,24 @@ def do_render(blender, directory, res, cfg):
     print(f"\n  {GREEN}全部完成!{RESET}")
     print(f"  输出目录: {WHITE}{base_output}{RESET}\n")
 
+    # Compress each rendered folder into its own zip
+    print(f"  {DIM}正在压缩...{RESET}", end="", flush=True)
+    zip_files = zip_render_folders(base_output, commands)
+    print(f"\r  {GREEN}已生成 {len(zip_files)} 个 zip:                     ")
+    for z in zip_files:
+        print(f"    {WHITE}{z.name}{RESET}")
+
+    after_actions = [
+        ("继续渲染", "again"),
+        ("打开输出文件夹", "open"),
+        ("返回主菜单", "main"),
+    ]
+
     while True:
-        action_idx = select_menu("下一步 (Esc 返回主菜单):", AFTER_ACTIONS)
+        action_idx = select_menu("下一步 (Esc 返回主菜单):", after_actions)
         if action_idx < 0:
             return
-        _, action = AFTER_ACTIONS[action_idx]
+        _, action = after_actions[action_idx]
         if action == "open":
             os.startfile(str(base_output))
             print(f"\n  {GREEN}已打开文件夹{RESET}\n")

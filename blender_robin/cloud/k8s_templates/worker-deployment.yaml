@@ -1,0 +1,118 @@
+---
+# Kubernetes Deployment for a persistent worker pool
+# Workers stay alive and continuously poll the queue for new tasks.
+#
+# Usage:
+#   kubectl apply -f worker-deployment.yaml
+#
+# Scale up/down:
+#   kubectl scale deployment robin-render-workers --replicas=5
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: robin-render-workers
+  namespace: default
+  labels:
+    app: robin-render-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: robin-render-worker
+  template:
+    metadata:
+      labels:
+        app: robin-render-worker
+    spec:
+      containers:
+      - name: worker
+        image: your-registry/blender-robin:latest
+        imagePullPolicy: Always
+
+        command:
+          - python
+          - -m
+          - blender_robin.cloud.worker
+
+        env:
+          - name: ROBIN_STORAGE_PROVIDER
+            value: "bos"
+          - name: ROBIN_STORAGE_BUCKET
+            value: "my-render-bucket"
+          - name: ROBIN_STORAGE_ENDPOINT
+            value: "http://s3.bj.bcebos.com"
+          - name: ROBIN_STORAGE_REGION
+            value: "bj"
+          - name: ROBIN_STORAGE_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: robin-storage-secret
+                key: access_key
+          - name: ROBIN_STORAGE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: robin-storage-secret
+                key: secret_key
+          - name: ROBIN_QUEUE_BACKEND
+            value: "redis"
+          - name: ROBIN_QUEUE_URL
+            value: "redis://redis-service:6379/0"
+          - name: ROBIN_QUEUE_NAME
+            value: "robin-renders"
+          - name: ROBIN_NOTIFY_TYPE
+            value: "feishu"
+          - name: ROBIN_NOTIFY_URL
+            valueFrom:
+              secretKeyRef:
+                name: robin-notify-secret
+                key: webhook_url
+                optional: true
+          - name: ROBIN_BLENDER_PATH
+            value: "/usr/local/bin/blender"
+          - name: ROBIN_WORK_DIR
+            value: "/tmp/robin_work"
+          - name: ROBIN_POLL_TIMEOUT
+            value: "30"
+
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+
+        volumeMounts:
+          - name: work-dir
+            mountPath: /tmp/robin_work
+
+        livenessProbe:
+          exec:
+            command: ["python", "-c", "import blender_robin.cloud.worker"]
+          initialDelaySeconds: 10
+          periodSeconds: 60
+
+      volumes:
+        - name: work-dir
+          emptyDir: {}
+
+---
+# Horizontal Pod Autoscaler — scale workers based on Redis queue depth
+# Requires KEDA (https://keda.sh) for queue-length-based scaling.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: robin-render-scaler
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: robin-render-workers
+  minReplicaCount: 0
+  maxReplicaCount: 10
+  triggers:
+  - type: redis
+    metadata:
+      address: redis-service:6379
+      listName: robin-renders
+      listLength: "5"   # one new worker per 5 queued tasks

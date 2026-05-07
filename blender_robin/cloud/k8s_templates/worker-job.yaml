@@ -1,0 +1,135 @@
+---
+# Kubernetes Job template for distributed rendering worker
+# Deploy one Job per render task, or use a Deployment for a persistent worker pool.
+#
+# Usage:
+#   kubectl apply -f worker-job.yaml
+#
+# Environment variables to customize:
+#   - ROBIN_STORAGE_* (object storage config)
+#   - ROBIN_QUEUE_* (task queue config)
+#   - ROBIN_NOTIFY_* (notification config)
+#   - ROBIN_BLENDER_PATH (if not in PATH)
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: robin-render-worker
+  namespace: default
+spec:
+  # Run until completion, then terminate
+  completions: 1
+  parallelism: 1
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600  # Clean up 1 hour after completion
+
+  template:
+    metadata:
+      labels:
+        app: robin-render-worker
+    spec:
+      restartPolicy: OnFailure
+
+      containers:
+      - name: worker
+        # Replace with your own image containing Blender + blender-robin
+        image: your-registry/blender-robin:latest
+        imagePullPolicy: Always
+
+        command:
+          - python
+          - -m
+          - blender_robin.cloud.worker
+
+        env:
+          # ── Object Storage ──────────────────────────────────────────
+          - name: ROBIN_STORAGE_PROVIDER
+            value: "bos"  # aws | bos | oss | minio
+          - name: ROBIN_STORAGE_BUCKET
+            value: "my-render-bucket"
+          - name: ROBIN_STORAGE_ENDPOINT
+            value: "http://s3.bj.bcebos.com"
+          - name: ROBIN_STORAGE_REGION
+            value: "bj"
+          - name: ROBIN_STORAGE_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: robin-storage-secret
+                key: access_key
+          - name: ROBIN_STORAGE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: robin-storage-secret
+                key: secret_key
+
+          # ── Task Queue ──────────────────────────────────────────────
+          - name: ROBIN_QUEUE_BACKEND
+            value: "redis"  # redis | rabbitmq | celery
+          - name: ROBIN_QUEUE_URL
+            value: "redis://redis-service:6379/0"
+          - name: ROBIN_QUEUE_NAME
+            value: "robin-renders"
+
+          # ── Notifications ───────────────────────────────────────────
+          - name: ROBIN_NOTIFY_TYPE
+            value: "feishu"  # webhook | slack | feishu | email
+          - name: ROBIN_NOTIFY_URL
+            valueFrom:
+              secretKeyRef:
+                name: robin-notify-secret
+                key: webhook_url
+                optional: true
+
+          # ── Worker Config ───────────────────────────────────────────
+          - name: ROBIN_BLENDER_PATH
+            value: "/usr/local/bin/blender"
+          - name: ROBIN_WORK_DIR
+            value: "/tmp/robin_work"
+          - name: ROBIN_POLL_TIMEOUT
+            value: "30"
+
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            cpu: "4"
+            memory: "8Gi"
+
+        volumeMounts:
+          - name: work-dir
+            mountPath: /tmp/robin_work
+
+      volumes:
+        - name: work-dir
+          emptyDir: {}
+
+---
+# Secret for object storage credentials
+# Create with: kubectl create secret generic robin-storage-secret \
+#   --from-literal=access_key=YOUR_KEY \
+#   --from-literal=secret_key=YOUR_SECRET
+apiVersion: v1
+kind: Secret
+metadata:
+  name: robin-storage-secret
+  namespace: default
+type: Opaque
+data:
+  # Base64-encoded credentials (replace with your own)
+  access_key: ""
+  secret_key: ""
+
+---
+# Secret for notification webhook URL
+# Create with: kubectl create secret generic robin-notify-secret \
+#   --from-literal=webhook_url=https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN
+apiVersion: v1
+kind: Secret
+metadata:
+  name: robin-notify-secret
+  namespace: default
+type: Opaque
+data:
+  # Base64-encoded webhook URL (replace with your own)
+  webhook_url: ""

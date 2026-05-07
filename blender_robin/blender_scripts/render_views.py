@@ -1,10 +1,83 @@
 """
 Shared multi-view rendering logic for all Blender scripts.
-Handles: views, closeups, composite.
+Handles: views, closeups, composite, HDR environment lighting, metadata export.
 """
+import json
 import math
+import os
 import random
 
+
+# ── HDRI environment lighting ─────────────────────────────────────────────
+
+ENV_TEXTURES_LIST = [
+    "belfast_sunset_puresky_1k.exr",
+    "brown_photostudio_02_1k.exr",
+    "city.exr",
+    "clarens_midday_1k.exr",
+    "courtyard.exr",
+    "evening_road_01_puresky_1k.exr",
+    "industrial_sunset_puresky_1k.exr",
+    "interior.exr",
+    "kloofendal_overcast_puresky_1k.exr",
+    "kloppenheim_06_puresky_1k.exr",
+    "promenade_de_vidy_1k.exr",
+    "resting_place_1k.exr",
+    "studio_small_09_1k.exr",
+    "sunset.exr",
+]
+
+
+def setup_hdri_world(hdri_path: str, env_texture: str = None):
+    """Set up HDR environment map as world lighting."""
+    import bpy
+
+    scene = bpy.context.scene
+    world = scene.world
+    if not world:
+        world = bpy.data.worlds.new("HDRI_World")
+        scene.world = world
+
+    world.use_nodes = True
+    nodes = world.node_tree.nodes
+    links = world.node_tree.links
+    nodes.clear()
+
+    env_node = nodes.new(type="ShaderNodeTexEnvironment")
+    env_node.location = (0, 0)
+
+    bg_node = nodes.new(type="ShaderNodeBackground")
+    bg_node.location = (400, 0)
+
+    output_node = nodes.new(type="ShaderNodeOutputWorld")
+    output_node.location = (800, 0)
+
+    links.new(env_node.outputs["Color"], bg_node.inputs["Color"])
+    links.new(bg_node.outputs["Background"], output_node.inputs["Surface"])
+
+    if env_texture is None:
+        env_texture = "kloofendal_overcast_puresky_1k.exr"
+
+    full_path = os.path.join(hdri_path, env_texture)
+    if os.path.exists(full_path):
+        bpy.ops.image.open(filepath=full_path)
+        env_node.image = bpy.data.images.get(env_texture)
+        print(f"HDRI: loaded {env_texture}")
+    else:
+        print(f"HDRI: {full_path} not found, using flat gray fallback")
+        bg_node.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1.0)
+        bg_node.inputs["Strength"].default_value = 1.0
+
+    return env_texture
+
+
+def hash_select_env_texture(model_id: str):
+    """Deterministically pick an HDRI based on model ID hash."""
+    idx = hash(model_id) % len(ENV_TEXTURES_LIST)
+    return ENV_TEXTURES_LIST[idx]
+
+
+# ── Model normalization ───────────────────────────────────────────────────
 
 def normalize_model(bpy, target_size=2.0):
     """
@@ -18,7 +91,6 @@ def normalize_model(bpy, target_size=2.0):
         print("Normalize: no mesh objects found")
         return
 
-    # Compute global bounding box in world space
     min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
     max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
 
@@ -42,20 +114,84 @@ def normalize_model(bpy, target_size=2.0):
 
     scale_factor = target_size / max_dim
 
-    # Find all root objects (no parent) to avoid double-transforming children
     all_objects = list(bpy.context.scene.objects)
     root_objects = [obj for obj in all_objects if obj.parent is None]
 
-    # Move roots so that the model center lands at origin, then scale
     for obj in root_objects:
         obj.location -= center
         obj.scale *= scale_factor
 
-    # Force scene update so world matrices are recalculated
     bpy.context.view_layer.update()
 
     print(f"Normalize: centered and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
 
+
+# ── Camera helpers ────────────────────────────────────────────────────────
+
+def get_camera_positions_on_sphere(center, radius, elevation_deg=10):
+    """Return 4 camera positions at fixed azimuths (45/135/225/315°) on a sphere."""
+    import mathutils
+
+    phi = math.radians(90 - elevation_deg)
+    positions = []
+
+    for angle in [45, 135, 225, 315]:
+        theta = math.radians(angle)
+        r = radius
+        x = center[0] + r * math.sin(phi) * math.cos(theta)
+        y = center[1] + r * math.sin(phi) * math.sin(theta)
+        z = center[2] + r * math.cos(phi)
+        positions.append((mathutils.Vector((x, y, z)), theta, phi))
+
+    return positions
+
+
+def build_transform_matrix(translation, rotation_euler):
+    """Build a 4x4 transformation matrix from translation and Euler rotation."""
+    import mathutils
+
+    translation = mathutils.Vector(translation)
+    mat = mathutils.Matrix.Translation(translation)
+    rot_mat = rotation_euler.to_matrix().to_4x4()
+    return mat @ rot_mat
+
+
+def listify_matrix(matrix):
+    """Convert a mathutils.Matrix to a list-of-lists for JSON."""
+    result = []
+    for row in matrix:
+        result.append(list(row))
+    return result
+
+
+# ── Metadata export ───────────────────────────────────────────────────────
+
+def export_metadata(output_dir, camera_angle_x, camera_lens, sensor_width, env_texture,
+                    view_locations, base_name="frame"):
+    """Write meta.json with camera parameters for NeRF / 3DGS training."""
+    out_data = {
+        "camera_angle_x": camera_angle_x,
+        "camera_lens": camera_lens,
+        "sensor_width": sensor_width,
+        "env_texture": env_texture,
+        "frames": [],
+    }
+
+    for idx, loc_info in enumerate(view_locations):
+        frame = {
+            "file_path": f"./{base_name}_{idx:04d}.png",
+            "transform_matrix": listify_matrix(loc_info["matrix"]),
+            "camera_type": loc_info.get("type", "PERSP"),
+        }
+        out_data["frames"].append(frame)
+
+    meta_path = os.path.join(output_dir, "meta.json")
+    with open(meta_path, "w") as f:
+        json.dump(out_data, f, indent=2)
+    print(f"Metadata: exported to {meta_path}")
+
+
+# ── Multi-view rendering ─────────────────────────────────────────────────
 
 def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, config, label):
     """Render multiple views + closeups + composite for any render mode."""
@@ -69,12 +205,17 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     requested_views = opts.get("views", ["diagonal"])
     closeup_count = opts.get("closeup_count", 0)
     do_composite = opts.get("composite", True)
+    export_meta = opts.get("export_metadata", False)
 
     camera = scene.camera
     if not camera:
         setup_camera_func(scene, center, bbox_size, render.resolution_x, render.resolution_y)
         camera = scene.camera
     cam_data = camera.data
+
+    default_sensor_width = cam_data.sensor_width
+    default_lens = cam_data.lens
+    camera_angle_x = 2.0 * math.atan(default_sensor_width / 2.0 / default_lens)
 
     ortho_views = {
         "front":  (mathutils.Vector((0, -1, 0)),  mathutils.Euler((math.pi / 2, 0, 0))),
@@ -88,10 +229,10 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     max_dim = max(bbox_size.x, bbox_size.y, bbox_size.z)
     distance = max_dim * 2
 
-    # Track view renders and closeup renders separately
     view_files = []
     closeup_files = []
     view_idx = 0
+    meta_locations = []
 
     # --- Multi-view renders ---
     for view_name in requested_views:
@@ -109,6 +250,37 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             look_dir = center - camera.location
             rot_quat = look_dir.to_track_quat('-Z', 'Y')
             camera.rotation_euler = rot_quat.to_euler()
+        elif view_name == "fixed_4view":
+            cam_data.type = 'PERSP'
+            sphere_radius = max_dim * 1.5
+            positions = get_camera_positions_on_sphere(center, sphere_radius, elevation_deg=10)
+            fixed_view_idx = 0
+            for pos, theta, phi in positions:
+                fixed_view_idx += 1
+                fv_suffix = f"_4v{fixed_view_idx}"
+                camera.location = pos
+                look_dir = center - camera.location
+                rot_quat = look_dir.to_track_quat('-Z', 'Y')
+                camera.rotation_euler = rot_quat.to_euler()
+                cam_data.lens = default_lens
+                cam_data.clip_start = 0.01
+                cam_data.clip_end = sphere_radius * 5
+
+                if export_meta:
+                    rot_mat = rot_quat.to_matrix().to_4x4()
+                    meta_locations.append({
+                        "matrix": build_transform_matrix(pos, camera.rotation_euler),
+                        "type": "PERSP",
+                    })
+
+                filepath = f"{output_dir}/{base_name}{fv_suffix}"
+                render.filepath = filepath
+                bpy.ops.render.render(write_still=True)
+                view_files.append(f"{base_name}{fv_suffix}")
+                print(f"{label}: fixed_4view #{fixed_view_idx} rendered to {filepath}")
+
+            # Skip other per-view logic — fixed_4view handles its own sub-views
+            continue
         elif view_name in ortho_views:
             cam_data.type = 'ORTHO'
             cam_data.ortho_scale = max_dim * 1.05
@@ -120,6 +292,12 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         else:
             continue
 
+        if export_meta:
+            meta_locations.append({
+                "matrix": build_transform_matrix(camera.location, camera.rotation_euler),
+                "type": cam_data.type,
+            })
+
         filepath = f"{output_dir}/{base_name}{suffix}"
         render.filepath = filepath
         scene.frame_set(1)
@@ -127,7 +305,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         view_files.append(f"{base_name}{suffix}")
         print(f"{label}: {view_name} rendered to {filepath}")
 
-    # --- Random closeups (separate naming: base_name_closeup1, _closeup2, ...) ---
+    # --- Random closeups ---
     if closeup_count > 0:
         mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
         bbox_diagonal = bbox_size.length
@@ -140,7 +318,6 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             for v in obj.data.vertices:
                 verts_world.append(mat @ v.co)
 
-        # Pick spread-out focus points to avoid clustering
         min_dist = bbox_diagonal * closeup_ratio * 0.8
         chosen_points = []
         max_attempts = 100
@@ -149,7 +326,6 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         for ci in range(closeup_count):
             closeup_suffix = f"_closeup{ci + 1}"
 
-            # Try to find a point far enough from previously chosen ones
             focus_point = center
             if verts_world:
                 for _ in range(max_attempts):
@@ -190,7 +366,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             closeup_files.append(f"{base_name}{closeup_suffix}")
             print(f"{label}: closeup {ci + 1} rendered to {filepath}")
 
-    # --- Composite (views + closeups) ---
+    # --- Composite ---
     all_files = view_files + closeup_files
     if do_composite and len(all_files) > 1:
         w = render.resolution_x
@@ -220,3 +396,40 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         canvas.save_render(all_path)
         bpy.data.images.remove(canvas)
         print(f"{label}: composite rendered to {all_path}")
+
+    # --- Metadata ---
+    if export_meta and meta_locations:
+        env_tex = opts.get("env_texture", "")
+        export_metadata(
+            output_dir, camera_angle_x, default_lens, default_sensor_width,
+            env_tex, meta_locations, base_name,
+        )
+
+
+# ── Shading helpers ───────────────────────────────────────────────────────
+
+def clear_normal_map():
+    """Disconnect normal map inputs from all Principled BSDF nodes."""
+    import bpy
+
+    for material in bpy.data.materials:
+        if not material.use_nodes:
+            continue
+        node_tree = material.node_tree
+        try:
+            bsdf = node_tree.nodes["Principled BSDF"]
+            if bsdf.inputs["Normal"].is_linked:
+                for link in bsdf.inputs["Normal"].links:
+                    node_tree.links.remove(link)
+        except Exception:
+            pass
+
+
+def shade_flat():
+    """Set all mesh objects to flat shading."""
+    import bpy
+
+    for obj in bpy.data.objects:
+        if obj.type == "MESH":
+            for poly in obj.data.polygons:
+                poly.use_smooth = False

@@ -165,17 +165,29 @@ def _common_render_options(f):
     f = click.option("--views", type=str, default=None, help="Comma-separated view list.")(f)
     f = click.option("--closeup-count", type=int, default=1, help="Number of random closeup shots.")(f)
     f = click.option("--no-composite", is_flag=True, help="Skip composite image generation.")(f)
+    f = click.option("--hdri", type=click.Path(), default=None, help="Path to HDRI .exr environment textures folder.")(f)
+    f = click.option("--env-texture", type=str, default=None, help="Specific HDRI file name to use.")(f)
+    f = click.option("--export-metadata", is_flag=True, help="Export meta.json with camera matrices.")(f)
+    f = click.option("--format", "-F", "output_format", default="PNG",
+                     type=click.Choice(["PNG", "JPEG", "WEBP", "EXR", "TIFF", "BMP"], case_sensitive=False),
+                     help="Output image format.")(f)
     return f
 
 
-def _build_script_options(glb_file, views, closeup_count, no_composite, **extra):
+def _build_script_options(glb_file, views, closeup_count, no_composite,
+                         hdri, env_texture, export_metadata, **extra):
     opts = {
         "glb_file": str(glb_file),
         "closeup_count": closeup_count,
         "composite": not no_composite,
+        "export_metadata": export_metadata,
     }
     if views:
         opts["views"] = views.split(",")
+    if hdri:
+        opts["hdri_path"] = hdri
+        if env_texture:
+            opts["env_texture"] = env_texture
     opts.update(extra)
     return opts
 
@@ -196,6 +208,7 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, **extra)
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
              style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
+             hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render UV checker maps for all GLB/GLTF files in a directory."""
     output_dir = Path(output)
@@ -216,11 +229,13 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
+            output_format=output_format.upper(),
             use_script=True,
             script_name="uv_checker_glb.py",
             filename_pattern="checkerboard",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
                 style=style, scale=scale,
             ),
         )
@@ -260,6 +275,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.pass_context
 def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
                 views: str | None, closeup_count: int, no_composite: bool,
+                hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
                 pattern: str, parallel: int, dry_run: bool) -> None:
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -280,11 +296,13 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
+            output_format=output_format.upper(),
             use_script=True,
             script_name="rgb_closeup.py",
             filename_pattern="texture_fidelity",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
             ),
         )
         configs.append(cfg)
@@ -324,6 +342,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 @click.pass_context
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
               wire_size: float, views: str | None, closeup_count: int, no_composite: bool,
+              hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
               pattern: str, parallel: int, dry_run: bool) -> None:
     """Render wireframe-on-white for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -344,11 +363,13 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
+            output_format=output_format.upper(),
             use_script=True,
             script_name="wireframe.py",
             filename_pattern="topology",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
                 wire_size=wire_size,
             ),
         )
@@ -388,6 +409,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
          views: str | None, closeup_count: int, no_composite: bool,
+         hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -408,11 +430,13 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
+            output_format=output_format.upper(),
             use_script=True,
             script_name="clay.py",
             filename_pattern="white_model",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
             ),
         )
         configs.append(cfg)
@@ -453,6 +477,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
 @click.pass_context
 def normal_map(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
                normal_space: str, views: str | None, closeup_count: int, no_composite: bool,
+               hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
                pattern: str, parallel: int, dry_run: bool) -> None:
     """Render surface normal maps for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -473,11 +498,13 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
             engine="BLENDER_EEVEE_NEXT",
             resolution_x=resolution[0],
             resolution_y=resolution[1],
+            output_format=output_format.upper(),
             use_script=True,
             script_name="normal_map.py",
             filename_pattern="normal_map",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
                 normal_space=normal_space,
             ),
         )
@@ -492,6 +519,72 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
         return
 
     click.echo(f"Normal map rendering {len(configs)} file(s) (space={normal_space})...")
+    processor = BatchProcessor(renderer, max_parallel=parallel)
+    result = processor.process(configs)
+    click.echo()
+    click.echo(
+        f"Done. {result.succeeded}/{result.total} succeeded, "
+        f"{result.failed} failed, {result.elapsed_seconds:.1f}s total"
+    )
+    for r in result.results:
+        status = "OK" if r.success else "FAIL"
+        click.echo(f"  [{status}] {r.blend_file.name}")
+
+
+# ── albedo ──────────────────────────────────────────────────────────────
+
+@cli.command("albedo")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="./albedo_output", help="Output directory.")
+@click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@_common_render_options
+@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
+@click.option("--dry-run", is_flag=True, help="Print commands without executing.")
+@click.pass_context
+def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
+           views: str | None, closeup_count: int, no_composite: bool,
+           hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+           pattern: str, parallel: int, dry_run: bool) -> None:
+    """Render albedo (diffuse color, no lighting) for all GLB/GLTF files."""
+    output_dir = Path(output)
+    dir_path = Path(directory)
+    (output_dir / "global").mkdir(parents=True, exist_ok=True)
+
+    model_files = sorted(dir_path.glob(pattern))
+    if not model_files:
+        click.echo(f"No files matching '{pattern}' found in {directory}")
+        return
+
+    configs = []
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
+        cfg = RenderConfig(
+            blend_file=model_file,
+            output_dir=case_dir,
+            engine="BLENDER_EEVEE_NEXT",
+            resolution_x=resolution[0],
+            resolution_y=resolution[1],
+            output_format=output_format.upper(),
+            use_script=True,
+            script_name="albedo.py",
+            filename_pattern="albedo",
+            script_options=_build_script_options(
+                model_file, views, closeup_count, no_composite,
+                hdri, env_texture, export_metadata,
+            ),
+        )
+        configs.append(cfg)
+
+    renderer = _get_renderer(ctx, with_progress=False)
+
+    if dry_run:
+        for cfg in configs:
+            cmd = renderer.build_command(cfg)
+            click.echo(" ".join(cmd))
+        return
+
+    click.echo(f"Albedo rendering {len(configs)} file(s)...")
     processor = BatchProcessor(renderer, max_parallel=parallel)
     result = processor.process(configs)
     click.echo()

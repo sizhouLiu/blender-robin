@@ -9,6 +9,29 @@ wheels/
 # Virtual environments
 .venv
 
+# Credentials & secrets
+.env
+*.secret
+*-secret.yaml
+credentials.*
+secrets.*
+service-account*.json
+
 # Render output
 output/
+robin_output/
 render_queue.db
+
+# Cloud worker
+_work/
+/tmp/robin_work/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

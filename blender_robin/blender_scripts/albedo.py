@@ -1,10 +1,9 @@
 """
-Blender script for surface normal map rendering from GLB/GLTF files.
+Blender script for albedo (diffuse color, no lighting) rendering from GLB/GLTF files.
 Runs INSIDE Blender's Python interpreter.
-Invoked via: blender --background --python normal_map.py -- <json_config>
+Invoked via: blender --background --python albedo.py -- <json_config>
 
-Outputs normals as RGB color: X→R, Y→G, Z→B, remapped from [-1,1] to [0,1].
-Flat surface facing camera ≈ (0.5, 0.5, 1.0) = classic light-blue normal map.
+Uses the Compositor DiffCol pass to output pure material base color without lighting.
 """
 import json
 import math
@@ -18,70 +17,7 @@ def import_glb(filepath):
     bpy.ops.object.delete(use_global=False)
 
     bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"NormalMap: imported {filepath}")
-
-
-def create_normal_material(space="world"):
-    """
-    Create a material that outputs surface normals as color.
-    space: "world" for world-space normals, "tangent" for tangent-space.
-    """
-    import bpy
-
-    mat = bpy.data.materials.new(name="NormalMap_Render")
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    nodes.clear()
-
-    output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (600, 0)
-
-    emission = nodes.new("ShaderNodeEmission")
-    emission.location = (400, 0)
-    emission.inputs["Strength"].default_value = 1.0
-
-    geometry = nodes.new("ShaderNodeNewGeometry")
-    geometry.location = (-200, 0)
-
-    # Remap normal from [-1,1] → [0,1]: multiply by 0.5 then add 0.5
-    multiply = nodes.new("ShaderNodeVectorMath")
-    multiply.operation = 'MULTIPLY'
-    multiply.inputs[1].default_value = (0.5, 0.5, 0.5)
-    multiply.location = (0, 50)
-
-    add = nodes.new("ShaderNodeVectorMath")
-    add.operation = 'ADD'
-    add.inputs[1].default_value = (0.5, 0.5, 0.5)
-    add.location = (200, 50)
-
-    if space == "tangent":
-        # Use normal map node to read tangent-space from mesh normals
-        # For GLB models without explicit normal maps, world-space is more useful
-        links.new(geometry.outputs["Normal"], multiply.inputs[0])
-    else:
-        links.new(geometry.outputs["Normal"], multiply.inputs[0])
-
-    links.new(multiply.outputs["Vector"], add.inputs[0])
-    links.new(add.outputs["Vector"], emission.inputs["Color"])
-    links.new(emission.outputs["Emission"], output.inputs["Surface"])
-
-    return mat
-
-
-def apply_material_to_meshes(material):
-    import bpy
-
-    applied = 0
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        obj.data.materials.clear()
-        obj.data.materials.append(material)
-        applied += 1
-
-    print(f"NormalMap: applied to {applied} mesh(es)")
-    return applied
+    print(f"Albedo: imported {filepath}")
 
 
 def get_bounding_box(mesh_objects):
@@ -111,8 +47,8 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
 
     camera = scene.camera
     if not camera:
-        cam_data = bpy.data.cameras.new("Normal_Camera")
-        camera = bpy.data.objects.new("Normal_Camera", cam_data)
+        cam_data = bpy.data.cameras.new("Albedo_Camera")
+        camera = bpy.data.objects.new("Albedo_Camera", cam_data)
         scene.collection.objects.link(camera)
         scene.camera = camera
 
@@ -155,6 +91,39 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     return camera
 
 
+def setup_albedo_compositor(output_dir, base_name):
+    """Enable DiffCol pass and output albedo via compositor."""
+    import bpy
+
+    scene = bpy.context.scene
+    scene.render.use_compositing = True
+    scene.use_nodes = True
+    bpy.context.view_layer.use_pass_diffuse_color = True
+
+    tree = scene.node_tree
+    tree.nodes.clear()
+
+    rl = tree.nodes.new("CompositorNodeRLayers")
+    rl.location = (0, 0)
+
+    # Combine DiffCol with original alpha
+    alpha_node = tree.nodes.new("CompositorNodeSetAlpha")
+    alpha_node.location = (300, 0)
+    tree.links.new(rl.outputs["DiffCol"], alpha_node.inputs["Image"])
+    tree.links.new(rl.outputs["Alpha"], alpha_node.inputs["Alpha"])
+
+    file_output = tree.nodes.new("CompositorNodeOutputFile")
+    file_output.base_path = output_dir
+    file_output.location = (600, 0)
+    file_output.format.file_format = scene.render.image_settings.file_format
+    file_output.format.color_mode = "RGBA"
+    file_output.file_slots[0].path = base_name + "_albedo"
+    file_output.file_slots[0].use_node_format = True
+    tree.links.new(alpha_node.outputs["Image"], file_output.inputs["Image"])
+
+    print("Albedo: compositor set up for DiffCol pass")
+
+
 def resolve_engine(name):
     import bpy
 
@@ -188,7 +157,7 @@ def main() -> None:
     if glb_file:
         import_glb(glb_file)
     else:
-        print("NormalMap: Warning - no glb_file specified")
+        print("Albedo: Warning - no glb_file specified")
         return
 
     import importlib.util, os
@@ -197,17 +166,6 @@ def main() -> None:
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
     rv.normalize_model(bpy)
-
-    # Clear normal map inputs so we render geometric normals
-    rv.clear_normal_map()
-
-    # Apply flat shading if requested (cleaner normal visualization)
-    if opts.get("flat_shading"):
-        rv.shade_flat()
-
-    normal_space = opts.get("normal_space", "world")
-    material = create_normal_material(space=normal_space)
-    apply_material_to_meshes(material)
 
     scene = bpy.context.scene
     render = scene.render
@@ -228,7 +186,7 @@ def main() -> None:
         if samples is not None:
             scene.eevee.taa_render_samples = samples
 
-    # HDR environment or simple dark background
+    # HDR environment (for accurate GI influence on diffuse, though albedo ignores direct lighting)
     hdri_path = opts.get("hdri_path")
     env_texture = opts.get("env_texture")
     if hdri_path:
@@ -236,23 +194,27 @@ def main() -> None:
     else:
         world = scene.world
         if not world:
-            world = bpy.data.worlds.new("Normal_World")
+            world = bpy.data.worlds.new("Albedo_World")
             scene.world = world
         world.use_nodes = True
         bg = world.node_tree.nodes.get("Background")
         if bg:
-            bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
-            bg.inputs["Strength"].default_value = 0.0
+            bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+            bg.inputs["Strength"].default_value = 1.0
 
     mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
     if not mesh_objects:
-        print("NormalMap: no mesh objects found")
+        print("Albedo: no mesh objects found")
         return
 
     center, bbox_size = get_bounding_box(mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
-    rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "NormalMap")
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "albedo")
+    setup_albedo_compositor(output_dir, base_name)
+
+    rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Albedo")
 
 
 if __name__ == "__main__":
