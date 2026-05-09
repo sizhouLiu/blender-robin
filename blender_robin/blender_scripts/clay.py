@@ -25,6 +25,8 @@ def setup_workbench_matcap(scene, matcap_name="clay_brown.exr"):
     shading = scene.display.shading
     shading.light = 'MATCAP'
     shading.color_type = 'MATERIAL'
+    shading.background_type = 'VIEWPORT'
+    shading.background_color = (0.05, 0.05, 0.05)  # near-black for clean keying
 
     # Try to set the requested matcap
     try:
