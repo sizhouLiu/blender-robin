@@ -3,10 +3,55 @@ Robin Interactive - 交互式渲染启动器
 用法: python robin_interactive.py
 """
 import json
-import msvcrt
 import os
 import sys
 from pathlib import Path
+
+# ---------- 跨平台按键读取 ----------
+if sys.platform == "win32":
+    import msvcrt
+
+    def _read_key():
+        key = msvcrt.getwch()
+        if key in ('\r', '\n'):
+            return 'enter'
+        if key in ('\x00', '\xe0'):
+            key2 = msvcrt.getwch()
+            if key2 == 'H':
+                return 'up'
+            if key2 == 'P':
+                return 'down'
+            return None
+        if key == '\x1b':
+            return 'esc'
+        return None
+
+else:
+    import tty
+    import termios
+    import select as _select
+
+    def _read_key():
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = os.read(fd, 1).decode('utf-8', errors='replace')
+            if ch in ('\r', '\n'):
+                return 'enter'
+            if ch == '\x1b':
+                if _select.select([sys.stdin], [], [], 0.05)[0]:
+                    ch2 = os.read(fd, 1).decode('utf-8', errors='replace')
+                    if ch2 == '[' and _select.select([sys.stdin], [], [], 0.05)[0]:
+                        ch3 = os.read(fd, 1).decode('utf-8', errors='replace')
+                        if ch3 == 'A':
+                            return 'up'
+                        if ch3 == 'B':
+                            return 'down'
+                return 'esc'
+            return None
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 # ANSI colors
 CYAN = "\033[36m"
@@ -68,10 +113,11 @@ RENDER_MODES = [
 
 
 def enable_ansi():
-    """Enable ANSI escape codes on Windows."""
-    import ctypes
-    kernel32 = ctypes.windll.kernel32
-    kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+    """Enable ANSI escape codes on Windows (no-op on other platforms)."""
+    if sys.platform == "win32":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
 
 def select_menu(title, options):
@@ -100,20 +146,16 @@ def select_menu(title, options):
     sys.stdout.flush()
 
     while True:
-        key = msvcrt.getwch()
-        if key == '\r':  # Enter
+        key = _read_key()
+        if key == 'enter':
             return selected
-        if key == '\x1b' or key == '\x00' or key == '\xe0':
-            key2 = msvcrt.getwch()
-            if key2 == 'H':  # Up
-                selected = (selected - 1) % total
-                draw()
-            elif key2 == 'P':  # Down
-                selected = (selected + 1) % total
-                draw()
-            elif key2 == '\x1b':  # Esc twice — treat as back
-                return -1
-        elif key == '\x1b':  # Single Esc — treat as back
+        if key == 'up':
+            selected = (selected - 1) % total
+            draw()
+        elif key == 'down':
+            selected = (selected + 1) % total
+            draw()
+        elif key == 'esc':
             return -1
 
 
@@ -458,7 +500,14 @@ def do_render(blender, directory, res, cfg):
             return
         _, action = after_actions[action_idx]
         if action == "open":
-            os.startfile(str(base_output))
+            if sys.platform == "win32":
+                os.startfile(str(base_output))
+            elif sys.platform == "darwin":
+                import subprocess
+                subprocess.run(["open", str(base_output)])
+            else:
+                import subprocess
+                subprocess.run(["xdg-open", str(base_output)])
             print(f"\n  {GREEN}已打开文件夹{RESET}\n")
         elif action == "again":
             print()
