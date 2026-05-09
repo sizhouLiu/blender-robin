@@ -3,6 +3,7 @@ Blender script for surface normal map rendering from GLB/GLTF files.
 Runs INSIDE Blender's Python interpreter.
 Invoked via: blender --background --python normal_map.py -- <json_config>
 
+Uses Blender's built-in Normal render pass — no material override needed.
 Outputs normals as RGB color: X→R, Y→G, Z→B, remapped from [-1,1] to [0,1].
 Flat surface facing camera ≈ (0.5, 0.5, 1.0) = classic light-blue normal map.
 """
@@ -21,67 +22,54 @@ def import_glb(filepath):
     print(f"NormalMap: imported {filepath}")
 
 
-def create_normal_material(space="world"):
-    """
-    Create a material that outputs surface normals as color.
-    space: "world" for world-space normals, "tangent" for tangent-space.
-    """
+def setup_normal_compositor(output_dir, base_name):
+    """Enable Normal pass and output via compositor with remapping."""
     import bpy
 
-    mat = bpy.data.materials.new(name="NormalMap_Render")
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    nodes.clear()
+    scene = bpy.context.scene
+    scene.render.use_compositing = True
+    scene.use_nodes = True
+    bpy.context.view_layer.use_pass_normal = True
 
-    output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (600, 0)
+    tree = scene.node_tree
+    tree.nodes.clear()
 
-    emission = nodes.new("ShaderNodeEmission")
-    emission.location = (400, 0)
-    emission.inputs["Strength"].default_value = 1.0
-
-    geometry = nodes.new("ShaderNodeNewGeometry")
-    geometry.location = (-200, 0)
+    rl = tree.nodes.new("CompositorNodeRLayers")
+    rl.location = (0, 0)
 
     # Remap normal from [-1,1] → [0,1]: multiply by 0.5 then add 0.5
-    multiply = nodes.new("ShaderNodeVectorMath")
-    multiply.operation = 'MULTIPLY'
-    multiply.inputs[1].default_value = (0.5, 0.5, 0.5)
-    multiply.location = (0, 50)
+    multiply = tree.nodes.new("CompositorNodeMixRGB")
+    multiply.blend_type = 'MULTIPLY'
+    multiply.inputs[0].default_value = 1.0  # Factor
+    multiply.inputs[2].default_value = (0.5, 0.5, 0.5, 1.0)
+    multiply.location = (300, 0)
 
-    add = nodes.new("ShaderNodeVectorMath")
-    add.operation = 'ADD'
-    add.inputs[1].default_value = (0.5, 0.5, 0.5)
-    add.location = (200, 50)
+    add = tree.nodes.new("CompositorNodeMixRGB")
+    add.blend_type = 'ADD'
+    add.inputs[0].default_value = 1.0
+    add.inputs[2].default_value = (0.5, 0.5, 0.5, 0.0)
+    add.location = (500, 0)
 
-    if space == "tangent":
-        # Use normal map node to read tangent-space from mesh normals
-        # For GLB models without explicit normal maps, world-space is more useful
-        links.new(geometry.outputs["Normal"], multiply.inputs[0])
-    else:
-        links.new(geometry.outputs["Normal"], multiply.inputs[0])
+    tree.links.new(rl.outputs["Normal"], multiply.inputs[1])
+    tree.links.new(multiply.outputs["Image"], add.inputs[1])
 
-    links.new(multiply.outputs["Vector"], add.inputs[0])
-    links.new(add.outputs["Vector"], emission.inputs["Color"])
-    links.new(emission.outputs["Emission"], output.inputs["Surface"])
+    # Combine with original alpha
+    alpha_node = tree.nodes.new("CompositorNodeSetAlpha")
+    alpha_node.location = (700, 0)
+    tree.links.new(add.outputs["Image"], alpha_node.inputs["Image"])
+    tree.links.new(rl.outputs["Alpha"], alpha_node.inputs["Alpha"])
 
-    return mat
+    file_output = tree.nodes.new("CompositorNodeOutputFile")
+    file_output.base_path = output_dir
+    file_output.location = (900, 0)
+    file_output.format.file_format = scene.render.image_settings.file_format
+    file_output.format.color_mode = "RGBA"
+    file_output.file_slots[0].path = base_name + "_normal"
+    file_output.file_slots[0].use_node_format = True
+    tree.links.new(alpha_node.outputs["Image"], file_output.inputs["Image"])
 
+    print("NormalMap: compositor set up for Normal pass")
 
-def apply_material_to_meshes(material):
-    import bpy
-
-    applied = 0
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        obj.data.materials.clear()
-        obj.data.materials.append(material)
-        applied += 1
-
-    print(f"NormalMap: applied to {applied} mesh(es)")
-    return applied
 
 
 def get_bounding_box(mesh_objects):
@@ -198,16 +186,9 @@ def main() -> None:
     spec.loader.exec_module(rv)
     rv.normalize_model(bpy)
 
-    # Clear normal map inputs so we render geometric normals
-    rv.clear_normal_map()
-
     # Apply flat shading if requested (cleaner normal visualization)
     if opts.get("flat_shading"):
         rv.shade_flat()
-
-    normal_space = opts.get("normal_space", "world")
-    material = create_normal_material(space=normal_space)
-    apply_material_to_meshes(material)
 
     scene = bpy.context.scene
     render = scene.render
@@ -251,6 +232,10 @@ def main() -> None:
 
     center, bbox_size = get_bounding_box(mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "normal")
+    setup_normal_compositor(output_dir, base_name)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "NormalMap")
 

@@ -2,9 +2,9 @@
   "blender_path": "F:\\blender\\blender.exe",
   "resolution": [
     1920,
-    1080
+    1920
   ],
-  "parallel": 4,
+  "parallel": 6,
   "views": [
     "diagonal",
     "front",
@@ -15,5 +15,8 @@
   ],
   "closeup_count": 2,
   "composite": true,
-  "uv_style": "color_grid"
+  "uv_style": "color_grid",
+  "delete_views": true,
+  "export_metadata": false,
+  "output_format": "PNG"
 }

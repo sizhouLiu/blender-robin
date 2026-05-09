@@ -123,7 +123,6 @@ async def process_one_task(
                 "export_metadata": task.get("export_metadata", False),
                 "no_composite": task.get("no_composite", False),
                 "flat_shading": task.get("flat_shading", False),
-                "normal_space": task.get("normal_space", "world"),
             },
         }
 

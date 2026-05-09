@@ -3,7 +3,8 @@
     "allow": [
       "Bash(uv --version)",
       "Bash(powershell *)",
-      "Bash(python -m uv init --name blender-robin --description \"Blender rendering scripts\")"
+      "Bash(python -m uv init --name blender-robin --description \"Blender rendering scripts\")",
+      "WebFetch(domain:docs.blender.org)"
     ]
   }
 }

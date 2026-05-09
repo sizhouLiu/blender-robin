@@ -28,12 +28,12 @@ DEFAULT_CONFIG = {
     "views": ["diagonal", "front", "back", "left", "right", "top", "bottom", "diagonal_back"],
     "closeup_count": 1,
     "composite": True,
+    "delete_views": False,
     "uv_style": "color_grid",
     "output_format": "PNG",
     "hdri_path": "",
     "env_texture": "",
     "export_metadata": False,
-    "normal_space": "world",
 }
 
 
@@ -164,6 +164,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     views = cfg.get("views", [])
     closeup_count = cfg.get("closeup_count", 1)
     composite = cfg.get("composite", True)
+    delete_views = cfg.get("delete_views", False)
     parallel = cfg.get("parallel", 1)
     output_format = cfg.get("output_format", "PNG")
     hdri_path = cfg.get("hdri_path", "")
@@ -184,6 +185,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args += ["--views", ",".join(views)]
     if not composite:
         args.append("--no-composite")
+    if delete_views:
+        args.append("--delete-views")
     if hdri_path:
         args += ["--hdri", hdri_path]
     if env_texture:
@@ -192,8 +195,6 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args.append("--export-metadata")
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
-    if command == "normal-map":
-        args += ["--normal-space", cfg.get("normal_space", "world")]
     try:
         cli(args, standalone_mode=False)
     except SystemExit:
@@ -211,13 +212,13 @@ def edit_config(cfg):
             (f"渲染视角数: {len(cfg.get('views', all_views))}", "views"),
             (f"特写数量: {cfg.get('closeup_count', 1)}", "closeup"),
             (f"拼合大图: {'是' if cfg.get('composite', True) else '否'}", "composite"),
+            (f"删除非特写图: {'是' if cfg.get('delete_views', False) else '否'}", "delete_views"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
             (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
             (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
             (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
-            (f"法线空间: {cfg.get('normal_space', 'world')}", "normal_space"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
         ]
@@ -270,6 +271,11 @@ def edit_config(cfg):
             cfg["composite"] = not cur
             print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
 
+        elif key == "delete_views":
+            cur = cfg.get("delete_views", False)
+            cfg["delete_views"] = not cur
+            print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
+
         elif key == "parallel":
             sys.stdout.write(f"\n  {CYAN}并行渲染数 (当前 {cfg.get('parallel', 1)}, 建议不超过 CPU 核心数): {RESET}")
             sys.stdout.flush()
@@ -314,12 +320,6 @@ def edit_config(cfg):
             cur = cfg.get("export_metadata", False)
             cfg["export_metadata"] = not cur
             print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
-
-        elif key == "normal_space":
-            cur = cfg.get("normal_space", "world")
-            new = "tangent" if cur == "world" else "world"
-            cfg["normal_space"] = new
-            print(f"\n  {GREEN}已切换为: {new}{RESET}\n")
 
 
 def clear_render_folders(base_output, commands):

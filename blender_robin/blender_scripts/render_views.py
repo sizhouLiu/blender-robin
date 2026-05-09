@@ -197,14 +197,17 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     """Render multiple views + closeups + composite for any render mode."""
     import mathutils
 
+    import os as _os
     render = scene.render
     output_dir = config.get("output_dir", "./output")
+    _os.makedirs(output_dir, exist_ok=True)
     base_name = config.get("filename_pattern", "render")
 
     all_views = ["diagonal", "front", "back", "left", "right", "top", "bottom", "diagonal_back"]
     requested_views = opts.get("views", ["diagonal"])
     closeup_count = opts.get("closeup_count", 0)
     do_composite = opts.get("composite", True)
+    delete_views_after_composite = opts.get("delete_views_after_composite", False)
     export_meta = opts.get("export_metadata", False)
 
     camera = scene.camera
@@ -397,6 +400,15 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         bpy.data.images.remove(canvas)
         print(f"{label}: composite rendered to {all_path}")
 
+        if delete_views_after_composite:
+            import os
+            ext = "." + render.image_settings.file_format.lower().replace("jpeg", "jpg")
+            for fname in view_files:
+                p = f"{output_dir}/{fname}{ext}"
+                if os.path.exists(p):
+                    os.remove(p)
+                    print(f"{label}: deleted view {fname}{ext}")
+
     # --- Metadata ---
     if export_meta and meta_locations:
         env_tex = opts.get("env_texture", "")
@@ -407,22 +419,6 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
 
 
 # ── Shading helpers ───────────────────────────────────────────────────────
-
-def clear_normal_map():
-    """Disconnect normal map inputs from all Principled BSDF nodes."""
-    import bpy
-
-    for material in bpy.data.materials:
-        if not material.use_nodes:
-            continue
-        node_tree = material.node_tree
-        try:
-            bsdf = node_tree.nodes["Principled BSDF"]
-            if bsdf.inputs["Normal"].is_linked:
-                for link in bsdf.inputs["Normal"].links:
-                    node_tree.links.remove(link)
-        except Exception:
-            pass
 
 
 def shade_flat():

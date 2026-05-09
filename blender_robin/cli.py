@@ -165,6 +165,7 @@ def _common_render_options(f):
     f = click.option("--views", type=str, default=None, help="Comma-separated view list.")(f)
     f = click.option("--closeup-count", type=int, default=1, help="Number of random closeup shots.")(f)
     f = click.option("--no-composite", is_flag=True, help="Skip composite image generation.")(f)
+    f = click.option("--delete-views", is_flag=True, help="Delete individual view images after compositing (keep only closeups + composite).")(f)
     f = click.option("--hdri", type=click.Path(), default=None, help="Path to HDRI .exr environment textures folder.")(f)
     f = click.option("--env-texture", type=str, default=None, help="Specific HDRI file name to use.")(f)
     f = click.option("--export-metadata", is_flag=True, help="Export meta.json with camera matrices.")(f)
@@ -174,12 +175,13 @@ def _common_render_options(f):
     return f
 
 
-def _build_script_options(glb_file, views, closeup_count, no_composite,
+def _build_script_options(glb_file, views, closeup_count, no_composite, delete_views,
                          hdri, env_texture, export_metadata, **extra):
     opts = {
         "glb_file": str(glb_file),
         "closeup_count": closeup_count,
         "composite": not no_composite,
+        "delete_views_after_composite": delete_views,
         "export_metadata": export_metadata,
     }
     if views:
@@ -208,7 +210,8 @@ def _build_script_options(glb_file, views, closeup_count, no_composite,
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
              style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
-             hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+             delete_views: bool, hdri: str | None, env_texture: str | None,
+             export_metadata: bool, output_format: str,
              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render UV checker maps for all GLB/GLTF files in a directory."""
     output_dir = Path(output)
@@ -234,7 +237,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
             script_name="uv_checker_glb.py",
             filename_pattern="checkerboard",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
                 style=style, scale=scale,
             ),
@@ -274,7 +277,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-                views: str | None, closeup_count: int, no_composite: bool,
+                views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
                 hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
                 pattern: str, parallel: int, dry_run: bool) -> None:
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
@@ -301,7 +304,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
             script_name="rgb_closeup.py",
             filename_pattern="texture_fidelity",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
             ),
         )
@@ -342,8 +345,8 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 @click.pass_context
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
               wire_size: float, views: str | None, closeup_count: int, no_composite: bool,
-              hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
-              pattern: str, parallel: int, dry_run: bool) -> None:
+              delete_views: bool, hdri: str | None, env_texture: str | None, export_metadata: bool,
+              output_format: str, pattern: str, parallel: int, dry_run: bool) -> None:
     """Render wireframe-on-white for all GLB/GLTF files."""
     output_dir = Path(output)
     dir_path = Path(directory)
@@ -368,7 +371,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
             script_name="wireframe.py",
             filename_pattern="topology",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
                 wire_size=wire_size,
             ),
@@ -408,7 +411,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-         views: str | None, closeup_count: int, no_composite: bool,
+         views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
          hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
@@ -435,7 +438,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             script_name="clay.py",
             filename_pattern="white_model",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
             ),
         )
@@ -468,18 +471,16 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
 @click.argument("directory", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="./normal_map_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
-@click.option("--normal-space", type=click.Choice(["world", "tangent"], case_sensitive=False),
-              default="world", help="Normal space: world or tangent.")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def normal_map(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-               normal_space: str, views: str | None, closeup_count: int, no_composite: bool,
+               views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
                hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
                pattern: str, parallel: int, dry_run: bool) -> None:
-    """Render surface normal maps for all GLB/GLTF files."""
+    """Render surface normal maps (camera-space) for all GLB/GLTF files."""
     output_dir = Path(output)
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
@@ -503,9 +504,8 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
             script_name="normal_map.py",
             filename_pattern="normal_map",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
-                normal_space=normal_space,
             ),
         )
         configs.append(cfg)
@@ -518,7 +518,7 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
             click.echo(" ".join(cmd))
         return
 
-    click.echo(f"Normal map rendering {len(configs)} file(s) (space={normal_space})...")
+    click.echo(f"Normal map rendering {len(configs)} file(s)...")
     processor = BatchProcessor(renderer, max_parallel=parallel)
     result = processor.process(configs)
     click.echo()
@@ -543,7 +543,7 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-           views: str | None, closeup_count: int, no_composite: bool,
+           views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
            hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
            pattern: str, parallel: int, dry_run: bool) -> None:
     """Render albedo (diffuse color, no lighting) for all GLB/GLTF files."""
@@ -570,7 +570,7 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
             script_name="albedo.py",
             filename_pattern="albedo",
             script_options=_build_script_options(
-                model_file, views, closeup_count, no_composite,
+                model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
             ),
         )

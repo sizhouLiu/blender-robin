@@ -1,0 +1,2475 @@
+{
+    "task": {
+        "id": "64e3c6e3-b09b-4f55-ace8-70a6247e2c93",
+        "name": "3. 表面完备度 (Copy) (Copy) (Copy) (Copy) (Copy) (Copy) (Copy)",
+        "storage_dir": "备度 (Copy)啊啊..as",
+        "model_list": [
+            "gpt-5.4-m-high-t-medium",
+            "gemini-3.1-pro-preview-m-low-t-medium",
+            "claude-4.6-opus-t-high",
+            "gemini-3.1-pro-preview-m-high-t-low",
+            "gemini-3.1-flash-lite-preview-m-high-t-low"
+        ],
+        "created_at": "2026-05-08T05:48:46"
+    },
+    "cases": [
+        {
+            "case_id": "case_001",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_001/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F038cce75ac855cb3481d2eed7eeb0de8ca032322b4c39e976b0a3b94162b0466"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_001/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2Fe372195795c75fbfd06a45de3cbde8439f84572b502908b6861fc4f7c0a1bd93"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_001/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F986742ee588fa76d16895afc07c743df9152b986bcf204a6705fc7c4056e4ef2"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_002",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_002/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F26bd4b3453c5e1264d0be7d1c0ed5125dcd2efd14d41e57a7405ebb477678c40"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_002/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F459ace1cd36f1280a3b99558d0c68461e9f007eba64ceaadb75e62c04db2a62b"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_002/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F5486b14bd0999473eb30c6cad60632b1bb5957897025bdb210093a78b3b2660b"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面存在大面积不规则噪点和凹凸起伏，平整度极差。",
+                        "链条部分和包体连接处存在非物理粘连，糊成一团。",
+                        "流苏部分相互穿模严重，且与包体存在粘连。"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 33,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 33,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的非物理融合粘连，零件边界模糊",
+                        "表面布满无法辨识的凹凸噪点，形体不整洁",
+                        "网格布线混乱且存在大量非预期的几何嵌套",
+                        "由于几何结构极度不规则，缺乏正常的UV展开与结构逻辑"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 40,
+                    "uv_layout_score": 13,
+                    "seams_stretching_score": 13,
+                    "texel_density_score": 14,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面严重不平整，存在大量AIGC噪点",
+                        "链条珠子非物理粘连融合",
+                        "下摆流苏大面积粘连糊在一起"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_003",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_003/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2Fcb44c7d3f9823acd34b969626fb0f43ba77009b0594676fb184a56a6f94746e4"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_003/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F13d2dc5d952bcf08f28b8f3e01c1d70894962b0933ff143f600a1dffa2a2f513"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_003/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2Fcd0e1ddbd263d4eaddbf0a20257a06572be27ebc4b1bedc01c90b311df4241fd"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的穿模问题",
+                        "模型存在大面积的破面",
+                        "模型表面存在密集的噪点",
+                        "模型零件之间存在严重的粘连现象"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型整体存在严重的非物理粘连和结构混乱，车轮与车身边界不清",
+                        "表面布满无法辨识的噪点与凹凸，缺乏几何平整度",
+                        "车身及底部存在明显的大面积破面与内部空洞",
+                        "模型存在严重的非预期穿模现象，与地面融合严重，几何结构完全无法识别"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "大面积破面",
+                        "表面严重不整洁、噪点密集",
+                        "大面积零件融合",
+                        "严重穿模"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_004",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_004/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F2a4646f8e441da95f54313258eaa718b9cf0446d792f3974fab0e328d2a4312b"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_004/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2F8104cc334d1e2f820eb673f8081cbf4da4492c951f8e79ae9b01c361a1936f70"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_004/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A15Z%2F3600%2F%2Fad4d01e317913c391a25a532a381e64b929801581d1c5adae03fe69a64dc6dbb"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_005",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_005/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Fb7f139dea924a391c0f04c2280604c327ee2fa90f429e58baac7579424f7efcc"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_005/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F822dd8a96418bb4e742f10db6d61f88a9dca5d7969d10a5e585884713b9e02c0"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_005/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F9aee7b5ae44c14cfc33679e7d9b3fd5058069928f7609afae6fe9fe6f1330d2f"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型整体结构完全糊烂，出现大面积破面和穿模，失去基本形体识别度",
+                        "表面布满密集的无意义凸起和凹坑，平整度极差",
+                        "各部分之间出现严重粘连，无法区分正常零件边界"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 41,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型边缘存在严重的无意义锐利尖刺与噪点，平整度极差",
+                        "几何形状呈现非物理的粘连与融化感，结构定义模糊",
+                        "表面拓扑结构混乱，非预期的起伏导致几何表面不洁净"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型结构完全崩溃，呈现泥巴状的严重粘连",
+                        "边缘存在大量不规则的锯齿和无意义凸起",
+                        "缺乏明确的几何结构和物理边界"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_006",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_006/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Faee6657687483bac6bd4b2ae2a3f599eeec166fa07f19bdf55d61ceedb83378f"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_006/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F468bcf6203a062967e4c1cb1cdebeb95a70f2ecb3969afd1a1a8edcdf4d0ce8e"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_006/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Fcd2691df38350b24f87c4191c06f15c2956465c5e0f4c758c6718d63c1a99bf9"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_007",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_007/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Ffb557d39dce23c13ea7d2f7e50e3b94e535408265b1706dbbdb160fcb7693c41"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_007/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F6ad3296ae8571c452751e9c1bd946258e728a63a623c2986a21e5db70c538b0c"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_007/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F39ab920565d827335a44ce28f47c53382d9ab80c7dcfd00873fefef1d5d30472"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 9,
+                    "grade": "medium",
+                    "issues": [
+                        "平整度维度得分9分：表面存在大面积不规则的锯齿状噪点和阶梯感，属于AIGC生成的典型噪声干扰",
+                        "沾黏维度得分8分：面部骨骼连接处界限模糊，存在非物理性的肉泥状融合感"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": null,
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 40,
+                    "uv_layout_score": 10,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 15,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面存在严重阶梯状马赛克噪点和锯齿，平整度极差"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_008",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_008/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Fc48920b2e7ec3e1e22a1c10c86d3c4c9eb7c8c0be74c16682bdd1611a792d026"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_008/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F8df358998d47481eba293e96949e72dc909168023d637d47efe3c79999d8b154"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_008/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Facd52dc9c2bef109bca9f6226e939ad97b4b22339bdbe8b5353d94c22d2f5627"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_009",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_009/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2F46d339b87ea9d6d03b3a4ae02f9bd0f85e01ebb031276ceda34616ab1ff4791e"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_009/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Fa25ceda12e71355b12fa470f4e2b8bfc31a70afc96d601804fd5e56a46380597"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_009/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A16Z%2F3600%2F%2Ff95f9c9fe9f4817fc74c401b70c6ed6ba732ef6123bf14091a24f3e6bfb1b89e"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型底盘和地面完全粘连",
+                        "车轮和底座存在大面积非物理粘连",
+                        "表面布满密集的AIGC噪点，不够平整",
+                        "存在多处几何破损和不规则孔洞"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 25,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型整体表面存在极度严重的噪点，几何形状扭曲不平整，缺乏应有的工业设计平滑度",
+                        "底盘与支撑平台存在大面积非物理粘连，缺乏清晰的边界区分",
+                        "车轮与车身底部结构存在明显的几何破损和缺失，导致模型在底部表现为非闭合状态",
+                        "各零件间的连接逻辑混乱，缺乏合理的装配结构，表现为融化粘连状"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "表面大量噪点和起伏",
+                        "车底与底座发生严重粘连",
+                        "存在明显破面及非预期孔洞"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_010",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_010/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2Fb53d118bb17c4e5dd7ad12ef1e76e35f253278ebf6bccbed1cd35e022e4a4d47"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_010/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F34658d0c60bf0098789fed5ae60c6d54173d6c6fecf9b429b450779cd26280ec"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_010/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F3a9fa4446868da8883792b217b40e2354a7da95ee23889ea68db301ee3ee0682"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的非物理粘连（Fusion），所有部件如人物、蜡烛、城堡塔楼等糊成一团，边界不清，像融化的泥巴。",
+                        "模型有大量穿模（Interpenetration），各部件互相交错，没有清晰的嵌套或连接逻辑。",
+                        "表面存在破面（Cracks/Holes）及不平整现象，边缘多处出现撕裂、粗糙锯齿以及非正常的孔洞结构。",
+                        "整体形体混乱，充斥无意义的小凸起和凹坑（平整度极差）。"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": null,
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 20,
+                    "uv_layout_score": 5,
+                    "seams_stretching_score": 5,
+                    "texel_density_score": 5,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在大面积结构粘连",
+                        "表面严重不平整，存在多处融化感",
+                        "部分组件之间存在非物理的穿模现象"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_011",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_011/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F20f56de34fbb773e96fb2184961346c7ed9e8dc3fb0c07678586cb79ab222917"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_011/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F1ff06cd51a8ca7183f26926ce924e332b953f890484bf34234d12c1a52029ff7"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_011/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F393308a2b5a38dce678ce06e88ffa750305f483caef8b0f4ad189bc7f755508b"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 60,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "模型多处存在轻微的穿模问题，如头发与身体、衣服与身体的交界处。",
+                        "部分区域的几何结构不够平滑，存在可见的噪点或不平整。"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": null,
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 90,
+                    "uv_layout_score": 30,
+                    "seams_stretching_score": 30,
+                    "texel_density_score": 30,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_012",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_012/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2Ff16026998f8206a955950e3bda8685644cea633e2cb77c33331b68976d4e7759"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_012/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F78142bd979dd167c0f3b48c0026f0f24ce4f129e24d2e3a9afa26939e0d0c954"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_012/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F78b859a142396b55476364c8ad5069879b39b6ebd685c2d691805639e105f64f"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 68,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 23,
+                    "grade": "medium",
+                    "issues": [
+                        "衣服和腿部交界处存在粘连",
+                        "面部细节不平整，存在微小噪点起伏",
+                        "头发和肩部交界处有粘连"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 41,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 24,
+                    "grade": "bad",
+                    "issues": [
+                        "人脸部位结构极其扭曲，呈现明显的融化感和非物理粘连，属于严重的几何形变",
+                        "表面噪点多，缺乏必要的解剖结构细节，属于AI生成的常见低质量伪影",
+                        "肢体连接处存在不自然的融合现象，几何结构缺乏独立性",
+                        "模型整体表面平整度极差，细节丢失严重"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 40,
+                    "uv_layout_score": 10,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 15,
+                    "grade": "bad",
+                    "issues": [
+                        "面部结构扭曲严重，五官粘连不清",
+                        "手部手指存在沾黏现象",
+                        "整体表面不平整，有明显噪点感"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_013",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_013/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F2ded946e6e84eb82ae19eabf293a6cb608af196f2947762d6ac64dabe76c5098"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_013/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F5620bab153c5fe0695c9e0595ca03ef0379660bc35d201b2c4e4b1318154859d"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_013/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A17Z%2F3600%2F%2F18c54d62b95f6c59535c48ab3681f46566632a44f5415dbc8afa651c2f3f7a1e"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": [
+                        "部分拼接处结构接缝略显明显，符合组装结构逻辑但对模型的一体化平滑度有微小影响"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_014",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_014/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F06881603fdf0bc62b7aca56cd2df05d80fba4681e098556b029454fa291b11f1"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_014/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F1fd4aa2a0658d1c26bc14889ce312e275556cfd9b6c592d3800dd1b398b9709b"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_014/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2Fab623ebccb5425524acec1b8fa260702878bba9699d62726c7e9cd5f6c61cdc1"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 34,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型背部及底部出现大面积破面，几何结构不完整",
+                        "背部结构与主体交接处呈融化的泥巴状，零件沾黏严重",
+                        "模型表面布满不规则的AI生成噪点，平整度极差",
+                        "由于大面积破面，内部结构与外壳产生严重的非预期穿模与漏光"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 41,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的表面拓扑破碎，整体形态极度不平整，充满了类似AIGC生成的无规律噪点和凹凸瑕疵。",
+                        "零件边界模糊，存在严重的沾黏问题，缺乏清晰的物理结构。",
+                        "模型内部结构极度混乱，出现大面积非物理的几何破损和缺失，无法形成闭合的表面。"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 20,
+                    "uv_layout_score": 5,
+                    "seams_stretching_score": 5,
+                    "texel_density_score": 10,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面存在严重的不平整和大量噪点",
+                        "大面积零件融合和非物理粘连",
+                        "存在多处破洞和非预期的结构穿插"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_015",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_015/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F0210224236bb3998c32197069879f53af36604286d9d172f5d7f8f81e12050d5"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_015/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F05d54af0a4ca93ca219efefa54d0177ff60dcff2bea5daff9ae9267199d98440"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_015/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F24cff98223f1f6c33296fdcf802aefc46e21678769b4804fc1f62a49e3fa2f19"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_016",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_016/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F5e2a98d6b1cbfb0da0c1854f1bda3bf65955dce58ef5defe9b95e8d04a278250"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_016/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F9001d71828a4371a3aaf4ccededb9a0679ad4ed0c5d11faa0f94fc7b2d0208c6"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_016/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F954fd0906eede4c3e02963e03293d6d9b660a4cdd6d14863d25f3ec87805b971"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 30,
+                    "seams_stretching_score": 31,
+                    "texel_density_score": 31,
+                    "grade": "good",
+                    "issues": [
+                        "大腿内侧零件衔接处存在轻微的结构穿模逻辑不清晰",
+                        "手部装甲边缘存在极其微小的非物理粘连感"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "medium",
+                    "issues": [
+                        "穿模：手臂甲胄与袖口连接处存在明显的几何嵌套与穿模现象，逻辑不清晰",
+                        "破面：整体未见明显黑斑或孔洞，表现尚可",
+                        "平整度：模型大体轮廓顺滑，表面无明显噪点污染",
+                        "沾黏：手部与甲胄连接处的拓扑结构处理显得较为生硬，存在局部融合感，缺乏独立物理结构的边界刻画"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": null
+            }
+        },
+        {
+            "case_id": "case_017",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_017/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2Fd6d690468dd0fb5a26800f34bb8a7ff808fda778cdb12787a862055fcae4c6f2"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_017/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F69bf90c5266224bd78505fabde739fe5eff4aee2d2464c2f15b5d7a9985d70df"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_017/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F066d8f5b88714dc3c2e5fd1b72268d99c45aa768ebe784c8884937ae8c0dfe9b"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "杯子把手与杯身连接处存在明显的非物理粘连，呈现泥巴状融合感",
+                        "杯身底部圆周转折处存在轻微的几何面片不平整及噪点现象",
+                        "把手根部结构模糊，缺乏清晰的物理连接逻辑"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 58,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 16,
+                    "grade": "medium",
+                    "issues": [
+                        "手柄与杯体连接处存在明显且不自然的融合（沾黏问题），看起来像是融化的泥塑效果，缺乏明确的物理连接结构。",
+                        "杯体与手柄交界处的布线存在严重的平滑伪影，导致几何表面不平整。",
+                        "手柄部分的几何形态过于模糊，且连接处缺乏硬边的细节处理，存在非物理的粘连现象。"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 60,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "把手与杯体连接处存在明显的非物理沾黏",
+                        "把手根部表面存在不规则的块状凸起和法线噪点问题"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_018",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_018/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F5087383548aeb97740448a867b401911920167747483ec3fc8a73de3b45ed2a3"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_018/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2Fd4c0ea34efdf5ffc50d02b8b167216114f4509b0b4d467a5bac558f390243494"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_018/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A18Z%2F3600%2F%2F253076abf8138c8fc0eb6139164b5a59ccf4f4300bf25613029cc831f18235df"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 75,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "表面噪点污染，存在明显不规则的凸起或凹陷（如模型背部或侧面的细节）",
+                        "部分区域存在轻微穿模或非物理粘连，细节处理不够干脆"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 42,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 25,
+                    "grade": "bad",
+                    "issues": [
+                        "穿模问题严重：时钟表盘圈明显未闭合且与框架结构混乱，存在明显的物理逻辑错误",
+                        "破面问题：时钟表盘圆环存在明显的视觉缺口（未闭合圆环），属于明显几何破损",
+                        "沾黏/结构融合：虽然主要是几何错误，但因为结构混乱导致零件边界定义模糊，存在非物理的粘连感"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_019",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_019/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F07c2a7d9709aa652d6aadfd438dd98ca5efcc5e766a10d61c16509a1c089ac40"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_019/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fb997193c64da1066cee9f0cec4967a4da13836ad22cc9f3e9da073d5d90a0c5d"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_019/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F73589f6792f883300dee40fbe5b01bac257ad9d940ac38febfb561458c9089dd"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 10,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的全局破面，尤其是背部支撑柱及底部基座出现大面积穿透和视觉空洞",
+                        "表面平整度极低，全身布满非预期的颗粒感噪点及不规则凸起，形体极不整洁",
+                        "零件间发生严重的非物理粘连，人物与锁链、柱体及地面植被融合呈泥巴状",
+                        "多处结构逻辑混乱，存在多处非预期的零件穿模现象"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "出现严重大面积穿模",
+                        "存在多处视觉可见的破面和空洞",
+                        "模型表面存在大量噪声，形体极度不平整",
+                        "零件间存在非物理粘连，边界模糊不清"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 10,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "存在大面积破面和结构残缺",
+                        "表面平整度极差，存在密集噪点",
+                        "零件之间存在严重的非物理粘连"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_020",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_020/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fdb30b6f21cc98ace821da898e97e3616e7c578a451e65a042fe36aaf884b9948"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_020/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F756696e4c7ececaac37b6f560c389710558fee3f132b35756f47fec059963176"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_020/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F7b9bfb56e61558f65f9473433c8afaea32dad56f21934e446775a7f0f6929ad9"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 68,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 34,
+                    "grade": "medium",
+                    "issues": [
+                        "模型存在多处穿模问题，例如扳机护圈与枪身的连接处逻辑不清，部分结构互相插空",
+                        "表面存在几何破洞和缝隙，尤其在细节连接处可见非物理的空洞",
+                        "有部分不规则散布的凸起或凹坑，影响大形的顺滑度",
+                        "部分零件交界处存在非物理的粘连现象，如握把和下机匣"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "零件结合处存在明显的非物理性穿模现象，尤其是枪机与握把衔接部分",
+                        "部分机械结构零件看起来像是简单堆叠，缺乏必要的装配间隙，存在细微的沾黏感",
+                        "握把与枪身连接处结构表现不够干脆，存在几何重叠导致视觉上的边界模糊"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 70,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "部分细节存在轻微粘连",
+                        "局部表面不够平整"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_021",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_021/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fc33bdc32ed6a3f6bfbee7544b8fe119f837bedde5698bc5c6cf106126ca624b0"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_021/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F8ccd87af0f1158c9ed6a7f80ffb27fe1369f2cf466963933d0f1fa972d82533a"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_021/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fdd88cf3dcc48f563cd0ed1d64d9c7f2431c6f8e9ce84b93f59477835d3856005"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 45,
+                    "uv_layout_score": 10,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 20,
+                    "grade": "bad",
+                    "issues": [
+                        "穿模",
+                        "破面",
+                        "表面噪点",
+                        "零件非物理粘连"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 42,
+                    "uv_layout_score": 9,
+                    "seams_stretching_score": 9,
+                    "texel_density_score": 24,
+                    "grade": "bad",
+                    "issues": [
+                        "多个零件连接处存在明显的穿模和不合理的嵌套",
+                        "底部机械结构存在严重的几何破面和断裂现象",
+                        "模型细节处存在零件融合，导致几何边界模糊不清",
+                        "表面存在较多不规则的几何噪点和拓扑错误"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 25,
+                    "uv_layout_score": 8,
+                    "seams_stretching_score": 8,
+                    "texel_density_score": 9,
+                    "grade": "bad",
+                    "issues": [
+                        "模型底部支架存在严重穿模与结构粘连",
+                        "模型表面存在破面与视觉孔洞",
+                        "整体几何结构物理连续性差"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_022",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_022/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fd740855c03cacca41a35b7b597c216d22d65cfcf1a44252e526471b2dd60d8a4"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_022/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F01d73df16dd255688006e671ae132524da1fbabf66aa6debcd3b1c78f57fb534"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_022/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F56a05f9e4e2c02781a39479c931132a9199ceaa0d81b937341e4d2178a0aef89"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 68,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 26,
+                    "grade": "medium",
+                    "issues": [
+                        "裙摆底部存在明显的几何平整度问题，出现不规则的凹凸形变（噪声）",
+                        "背部挂包与身体连接处存在轻微的非物理穿模",
+                        "面部及发丝结构存在一定程度的细节粘连（Fusion）",
+                        "腰带配件边缘与裙体接触点缺乏清晰的物理衔接结构"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "medium",
+                    "issues": [
+                        "模型裙摆处存在严重的几何拓扑混乱和着色异常",
+                        "附件（腰包、皮带）与身体的过渡结合处处理生硬，缺乏物理逻辑",
+                        "表面整体存在视觉噪声和不均匀的几何起伏"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 85,
+                    "uv_layout_score": 28,
+                    "seams_stretching_score": 28,
+                    "texel_density_score": 29,
+                    "grade": "medium",
+                    "issues": [
+                        "短裙下摆边缘存在轻微几何不平整",
+                        "部分配饰交界处存在轻微粘连感"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_023",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_023/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F0cc8a762a25a1add9b50347e3506bf24ac32f046129035f2d3ff21bbe96b16a1"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_023/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F72440435c3497138dd09cd497d8fbeaa2aff4ce92d3787a9ea4d9a437713dec4"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_023/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fc392d70aa007dce0b040d640f0f5ee8312b4627f3a99bd646b4b4f2aa181b020"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 60,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "UV结构有待优化",
+                        "部分区域存在拉伸",
+                        "像素密度不够均匀"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 84,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 17,
+                    "grade": "good",
+                    "issues": [
+                        "存在轻微的非预期穿模，主要集中在手部与武器握持区域以及衣服下摆与腿部结构交界处",
+                        "部分区域几何粘连较为紧凑，虽未达严重融合，但边界逻辑尚可优化"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 70,
+                    "uv_layout_score": 23,
+                    "seams_stretching_score": 23,
+                    "texel_density_score": 24,
+                    "grade": "medium",
+                    "issues": [
+                        "存在局部穿模问题",
+                        "模型表面有轻微噪点",
+                        "部分零件交界处存在轻微粘连"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_024",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_024/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2F7a5442e682cfcc713e9b09db9ee462555c4bc72565a55a05255f7b4095b33264"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_024/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fae61c4672262bed84d4a8ddf5dbbf9cac76e516c8e1b4017f1525a8fbbf4a082"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_024/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A19Z%2F3600%2F%2Fd4973fecf83c8ea2ad02a900c8f0652721781d0b8fa62ff8d22be2f6f9612d9e"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_025",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_025/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2Fcdd827a3c3025259d9e9aef8c2f3882f79a8a503990b876e23cd7b39daeec111"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_025/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F5f4d6d9b3f19d459a54e059f4d7490dfb853971884aa50642796325863f30860"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_025/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F157d62562dd1dafedd97bbdf9f8086bdb2f18a9db2ef8fbe74e90543f90303dc"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 9,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "存在严重的大面积穿模，车轮与地面结构逻辑混乱",
+                        "车窗、顶部及底部出现大量非预期的大面积破面与空洞",
+                        "表面遍布极其密集的噪点污染，平整度极差",
+                        "车轮与地面、车体交界处出现严重的泥巴状融合粘连"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 18,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在多处大面积破面和孔洞，表面缺失严重",
+                        "表面噪点极其密集，缺乏物理平整度",
+                        "车轮及底盘部位几何结构混乱，存在明显的非物理融合与粘连",
+                        "整体模型呈现低质量重构特征，无法满足3D资产生产标准"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "大面积破损、破洞严重",
+                        "表面布满噪点，极不平整",
+                        "存在严重的结构沾黏和糊状物",
+                        "底部出现严重的飞线和穿模"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_026",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_026/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F4efcb3fdd4de7c8d1bfe7693f47db51e60fb7834a0338ad96cd4f80484a44c4c"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_026/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2Fa1220cfc20443c41581ba72186c8a87b2d34cafc2086170e5b73af39c2ba4470"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_026/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F2ed6e41327b305702773dbbc0a3ce84588e59faf992a5a86035547dad158ff5f"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_027",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_027/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F3ace9bf7729c83b59d4c63d5f2e78c20a0e7917c0d48adea4a1f605fefb2001a"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_027/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2Fcad78499ae11c4ea00931a82896fc75b7bbc323a9ac18057024a59f0c620f861"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_027/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2Fa562dd040cdf4433ab3ff5b3a8c90e2b46646c1edf046ede85c6a4313d349128"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 34,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "模型多处零件（如猫身体与树枝、花朵与树枝）交界处呈融化状，存在严重非物理粘连",
+                        "表面存在大量AIGC特征的噪点、不规则凹坑和凸起，平整度极差",
+                        "猫的颈部、背部及树枝部分出现明显的几何破面和撕裂孔洞",
+                        "零件间嵌套逻辑混乱，树枝与底座及花卉连接处存在多处非预期穿模"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 51,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 17,
+                    "grade": "medium",
+                    "issues": [
+                        "存在明显的穿模问题，猫与树枝及底座接触处几何处理不自然",
+                        "多处可见明显的破面与缝隙，特别是在模型连接部位",
+                        "表面存在不规则噪点与小凸起，平整度较差",
+                        "零件间存在非物理的粘连（Fusion），边界处理模糊"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 44,
+                    "uv_layout_score": 14,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 15,
+                    "grade": "bad",
+                    "issues": [
+                        "多处零件发生严重非物理沾黏，猫身与树枝完全融合无清晰边界",
+                        "模型表面存在多处破面与细小孔洞",
+                        "表面平整度较差，存在较多不规则起伏及AIGC特征噪点",
+                        "花朵与树叶结构粘连严重，缺乏独立性"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_028",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_028/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F024c7ed86b1e1a572e37d207b9c0ca3cfbabc4c9f36ca46f784dda4cb7f2bb86"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_028/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2Fed39b101b7075ca95657521d0a83096e3ee62ad66adc45269d57f33894335a6e"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_028/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A20Z%2F3600%2F%2F7abeafde5dde96f686724ad561ab82079f86a9128e025d444e9acd7d6eec0411"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_029",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_029/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F6555a7a42bf0e7e2a6352b4cb1c743a973a4dfac661b99f5b2f02f9f3c8cc698"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_029/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F8fbe89e92a0cfe8bbda02a7dc7bcb2ca2d3512a258c53ad5a7f757cfceb496ab"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_029/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F544818d4218d1632fc6f57f3142a99c0d194903d673f6dad3704239d9e1336ce"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 80,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 30,
+                    "grade": "medium",
+                    "issues": [
+                        "模型表面存在少许不平整"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_030",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_030/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2Feef9b310334448b84283d508c26975345eac196155a79fc7061de7a845c47024"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_030/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F067cabdf9d4678c8c582c1402ab7f657690d92b0ec0bd73134c625fb8762ba35"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_030/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F7e5494c687898eeaae27d0e229ac1f2175c590c7c652eff00fd203b1287360c8"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 31,
+                    "seams_stretching_score": 30,
+                    "texel_density_score": 31,
+                    "grade": "good",
+                    "issues": [
+                        "翅膀与身体连接处存在轻微的结构穿插",
+                        "底座岩石部分存在极小面积的表面噪点"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 75,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "medium",
+                    "issues": [
+                        "模型足部与底座结合处存在明显的非物理粘连，缺乏明确的结构交界",
+                        "背部及翅膀连接处存在细微的穿模迹象，几何嵌套逻辑不够清晰"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_031",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_031/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F38dee7b087150998d87a67888760ca992354445a7da91116eb3904c038af1baf"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_031/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2Feac2aed3fe1c3db8ceaac72fa5d37197491cd6fcb5f7eec6a2731dd5110f9a54"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_031/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F1d15a23cb4224775f1ef7ff3131c8c84a0c82ad47bfaa6e13b758f74656cb2a7"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 0,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "大面积零件穿模",
+                        "多处破面与几何断裂",
+                        "表面噪点严重，形体起伏不自然",
+                        "严重的零件沾黏融合现象"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 24,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 8,
+                    "texel_density_score": 8,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的非物理穿模，部分连接处处理粗糙",
+                        "全身多处破面与不规则缝隙，表面结构严重破碎",
+                        "表面噪点极其严重，几何起伏极不平整，缺乏基本细节处理",
+                        "零件间边界模糊，存在明显的几何粘连与融合"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 10,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 5,
+                    "texel_density_score": 5,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面存在大面积非物理粘连，零件边界糊在一起",
+                        "存在明显的破洞、撕裂和内部空洞结构",
+                        "表面极度不平整，充满不规则的起伏和噪点",
+                        "不同结构间存在严重的非预期穿模和嵌套"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_032",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_032/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F1678244d1c37e13a04d5594b92cdb4a6e7c9fc1fba904f7297ca511dde299eaa"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_032/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F704df3a4437e6be1c54f2b1ec12712e098714cda218a39883b8a6974dfcb0f22"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_032/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F2e8083f0fb931b5f38d2f05bac86943e25326820113830f05783f1f92062a75b"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_033",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_033/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F1e5b707eb80381aff95e326a4bccbb0a43e374cd808419f3fe84dcfa2029286c"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_033/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2Ff46d228b7ab90d11fe3c09740fa02fb947da92604ed098e01da0808eb3ba22c8"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_033/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A21Z%2F3600%2F%2F507e2297c9783a576ce413392aee2974739a15138ce4d1b7a412e2168b572008"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 60,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "模型部件悬浮",
+                        "手部存在粘连"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_034",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_034/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fffadbdd2ffa759f406e456423794c2845c5f91cb53b34a7a64825db6305688a1"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_034/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F30789fa74df4d5157b35a888d125f1f36f673a3ebacc1bea660f8c934a430b55"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_034/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F5c770496b5212c5ede2fccb663cc382129b7933af3ec071eaebfb4a02b450f80"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 60,
+                    "uv_layout_score": 15,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 30,
+                    "grade": "medium",
+                    "issues": [
+                        "衣服前襟处有明显的穿模现象",
+                        "头发多处出现几何破损和视觉空洞",
+                        "背部飘带与身体有不自然的粘连",
+                        "头部饰品存在细节融合模糊"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 70,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 30,
+                    "grade": "medium",
+                    "issues": [
+                        "模型存在明显的穿模问题，主要集中在腰部裙装与上衣的交界处",
+                        "部分区域几何粘连严重，缺乏物理层级感，呈现融化状",
+                        "网格平整度一般，在复杂组件交接处存在不自然的硬边和凹凸"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 60,
+                    "uv_layout_score": 20,
+                    "seams_stretching_score": 20,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "手指部分存在严重沾黏",
+                        "头发与配饰结构粘连不清晰",
+                        "配饰直接融合在身体表面"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_035",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_035/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F202569e844e22ff8b3050b36d7403c0fc2104e5e19af7792a240ecc6b5d477bd"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_035/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F6585138a963a00451e980df5f71db28f72bf30bab3ee44e3ee489098b804e2c5"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_035/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F4169bd9c76b3955c48f73c2bcc0545cb7f39e3003b51d314b66845abc67aee49"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 84,
+                    "uv_layout_score": 28,
+                    "seams_stretching_score": 28,
+                    "texel_density_score": 28,
+                    "grade": "medium",
+                    "issues": [
+                        "模型右肩处零件存在非物理粘连，形态模糊",
+                        "裙摆折褶处存在局部穿模现象"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": null,
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 80,
+                    "uv_layout_score": 27,
+                    "seams_stretching_score": 26,
+                    "texel_density_score": 27,
+                    "grade": "medium",
+                    "issues": [
+                        "武器与身体局部存在轻微粘连",
+                        "裙摆处存在少量穿插"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_036",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_036/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fa20981ae61dfe8f1c9072235c847e3533d5d7536bb31eefeeb38d34c8031094d"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_036/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fd33ce16aadb4acca987f7816092537004da9cd7c06d5b91a5055e7f038f4e55a"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_036/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F3bf93b10842465ba015675f46465e9dbd29d771dac3df61c73aa93762d258d48"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "good",
+                    "issues": [
+                        "雨刮器与前挡风玻璃交界处存在轻微的非物理嵌套穿模"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_037",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_037/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fc792946cfb6cb86c20b3767a3bc6e6b19f6ba92d2c40ea4ef00dd863f8d92e4e"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_037/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F603dfea1023997361d0ce663afc9c6ac113b7d2b9e447812b6b444dec55326b1"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_037/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F729e48a9d52f699bb104e5aba96f195ea8d4568efdcabb5c585a561b96b07d18"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 34,
+                    "uv_layout_score": 9,
+                    "seams_stretching_score": 10,
+                    "texel_density_score": 15,
+                    "grade": "bad",
+                    "issues": [
+                        "多处明显的非预期穿模，特别是扶手立柱与台阶连接处逻辑混乱",
+                        "扶手表面存在大量不规则破面和几何孔洞",
+                        "模型表面包含严重的AIGC生成噪点，形态扭曲不平整",
+                        "零件边缘熔化粘连感严重，缺乏真实的物理结构独立性"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 42,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "扶手处存在明显的几何穿模问题",
+                        "楼梯踏板与支撑结构连接处存在严重的非物理粘连（融化感）",
+                        "表面拓扑结构极其不平整，出现大量无意义的尖锐噪点与杂乱凸起",
+                        "模型几何逻辑混乱，缺乏基本的物理结构支撑感"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 20,
+                    "uv_layout_score": 5,
+                    "seams_stretching_score": 5,
+                    "texel_density_score": 10,
+                    "grade": "bad",
+                    "issues": [
+                        "表面严重不平整，存在大量噪点和畸变",
+                        "零件之间存在严重的非物理粘连",
+                        "模型存在穿模、破面和结构缺失"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_038",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_038/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2F3f845dce6229908ba988ca6b0861a40acfaacfc1b58b5c2bc9af1e74e8d003a1"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_038/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fa09b49978cedde6c31aafbfda1353dc3d3659e2a9899f61adc3d5f1fe96c6689"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_038/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A22Z%2F3600%2F%2Fb3d5a7fb6fcfa28ba47988f32c896151c642d2f9ffd3c9cf5dc3b98f18f09f12"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "穿模：钩状零件直接穿透主体结构，缺乏物理合理的连接件或垫片处理",
+                        "沾黏：支撑架与背面主体的交界处呈现出非物理的融合感，边界不够清晰",
+                        "平整度：背部支撑杆存在不规则的形变，非标准工业几何形状"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 42,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "bad",
+                    "issues": [
+                        "出现多处非预期的零件穿模问题",
+                        "明显的几何表面破损与不封闭结构",
+                        "表面结构处理粗糙，存在非物理的悬浮粘连",
+                        "整体模型构建逻辑混乱，零件连接处处理不符合物理规则"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 80,
+                    "uv_layout_score": 26,
+                    "seams_stretching_score": 27,
+                    "texel_density_score": 27,
+                    "grade": "medium",
+                    "issues": [
+                        "模型存在部件之间直接穿插的穿模现象，缺乏物理连接逻辑"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_039",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_039/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2Fb17d8b4816c9d482716112eb46c46805fc98363093241ccfdb8a671e24c50c16"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_039/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2Fd8d1f34d1bd231fa01c1649a7336abf04bc4363d216d868cc3e0e5afbb2141e6"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_039/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F3401b534f366bcb09dd5d1066a4e5becda52de3cf7aee0d1c873fc94860467b7"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 52,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 18,
+                    "grade": "bad",
+                    "issues": [
+                        "前胸区域存在严重的模型粘连和拉伸，结构不清晰",
+                        "前腿内侧存在穿模和粘连现象",
+                        "背部毛发纹理呈现不规则的噪点状起伏",
+                        "整体表面平整度较差，存在多处不自然的凹凸"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 75,
+                    "uv_layout_score": 0,
+                    "seams_stretching_score": 0,
+                    "texel_density_score": 0,
+                    "grade": "medium",
+                    "issues": [
+                        "模型表面存在明显的非自然噪点，尤其在毛发区域纹理显得模糊且不规整，平整度评分较低",
+                        "作为扫描或生成式资产，表面缺乏拓扑细节的清晰度，属于中等质量"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 50,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 16,
+                    "grade": "bad",
+                    "issues": [
+                        "模型表面存在大量不规则起伏和AIGC噪点",
+                        "毛发区域存在明显的融化感和粘连问题"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_040",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_040/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F463557356428e3de93dc395cfe96adf28b6265f8f2e397f01ae5fe64037b754d"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_040/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F2c21778cdad7bcbdaf9eecd53b6774dff8c600813524a56856b112f3ed13c5de"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_040/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2Ffb05cd4fbc6b2c59a489884876d041744265233540883c3ea22b3d49688a3f3a"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 68,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 25,
+                    "texel_density_score": 26,
+                    "grade": "medium",
+                    "issues": [
+                        "穿模：握把底座与主体连接处存在物理逻辑不清晰的插空穿模 (扣8分)",
+                        "平整度：枪管前端固定环表面存在明显的非预期细碎结构噪声 (扣8分)",
+                        "沾黏：侧面导管与主体罐体的衔接处出现类似泥巴状的非物理融合 (扣8分)",
+                        "破面：枪口旋转盘中心区域存在一处明显的黑块阴影，疑似几何体面片重叠或破洞导致的视觉异常 (扣8分)"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 92,
+                    "uv_layout_score": 30,
+                    "seams_stretching_score": 30,
+                    "texel_density_score": 32,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        },
+        {
+            "case_id": "case_041",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_041/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F8a9f3d55eba7c2653603dd631ce768917e5c6fc82154f2ab935aab4528478af8"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_041/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2Fb838f59778688024f0b9a10f4f400448698ff720a073a9567afe0e9032b3f833"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_041/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2Fd41bbe0b223225cd098a3188eb2a8da72edc52f7c0cc4063a8231620165a7546"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 41,
+                    "uv_layout_score": 17,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 7,
+                    "grade": "bad",
+                    "issues": [
+                        "模型存在严重的零件穿模现象，特别是在身体与背甲连接处",
+                        "表面结构处理粗糙，部分边界存在不自然的粘连与融合感",
+                        "几何表面平整度不足，存在明显的无意义起伏与非物理结构噪点",
+                        "模型整体几何逻辑混乱，缺乏清晰的拓扑与部件衔接"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 80,
+                    "uv_layout_score": 26,
+                    "seams_stretching_score": 26,
+                    "texel_density_score": 28,
+                    "grade": "medium",
+                    "issues": [
+                        "手指部分存在轻微沾黏现象",
+                        "部分结构连接处存在轻微穿模现象"
+                    ]
+                }
+            }
+        },
+        {
+            "case_id": "case_042",
+            "resolved_prompt": [
+                {
+                    "type": "text",
+                    "content": "你是专业的3D资产质量评审专家，需严格按照以下标准，对3D资产的【表面完备度】进行单项打分，满分100分，仅输出结构化JSON结果，禁止额外发散、禁止解释标准、禁止补充内容。\n\n【指标定义】\n评估模型表面的物理连续性、结构独立性及几何纯净度。核心考察资产是否符合基本的物理构建逻辑，严禁出现非预期的面片交叠、几何破损、不正常的表面噪点或不同零件间的非物理粘连。\n\n【评估维度&打分规则】\n总分100分，4个维度各25分，独立扣分，扣完即止：\n1. 穿模（Interpenetration，25分）：不同零件间嵌套逻辑清晰，交界处干脆。如有接触，应有符合物理规则的结构处理（如垫片或接缝）。完全符合得25分；每出现1处非预期的相互插空、缺乏物理连接逻辑的穿模，扣8分；出现大面积穿模，此项0分。\n2. 破面（Cracks/Holes，25分）：表面完全封闭，无非预期的视觉孔洞。完全符合得25分；每出现1处撕裂、缝隙、视觉可见的内部空洞、非阴影造成的“纯黑块”或“漏光”，扣8分；出现大面积破面，此项0分。\n3. 平整度（Flatness/Noise，25分）：大形起伏顺滑，表面无噪点污染。完全符合得25分；每出现1处不规则散布的无意义小凸起/小凹坑（AIGC常见噪声），扣8分；表面整体不整洁、噪点密集，此项0分。\n4. 沾黏（Fusion，25分）：零件间边界明确。完全符合得25分；每出现1处交界处糊在一起、像融化的泥巴的非物理粘连，扣8分；出现大面积零件融合，此项0分。\n\n【参考标准】\nGood case：零件边界清晰、无穿模，表面完全封闭无破洞，大形顺滑无噪点，无零件粘连；\nBad case：存在穿模、破面、表面噪点、零件非物理粘连等问题。\n\n【输入要求】\n基于提供的完整3D白模图进行全局评估，保证打分公平性。\n\n【输出要求】\n仅输出符合以下格式的JSON，不要任何其他内容：\n{\n  \"score\": 最终得分(0-100的整数),\n  \"interpenetration_score\": 穿模维度得分(0-25的整数),\n  \"cracks_holes_score\": 破面维度得分(0-25的整数),\n  \"flatness_noise_score\": 平整度维度得分(0-25的整数),\n  \"fusion_score\": 沾黏维度得分(0-25的整数),\n  gradestring分类标签，仅为good/medium/bad中的一个,\n \"issues\": 扣分原因列表(数组，无问题填[])\n}"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_042/white_model.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F50a142d062ba594edff8d475e277d4d70b11fc0ef7e73c233f35f4fe4d8c58ff"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model2.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_042/white_model2.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F2acdf0cfb21f4cd149855af16d1fca67f83a05389c05175854c516b22dae6b59"
+                },
+                {
+                    "type": "input_image",
+                    "filename": "white_model_all.png",
+                    "url": "http://cap-arena.bj.bcebos.com/%E5%A4%87%E5%BA%A6%20%28Copy%29%E5%95%8A%E5%95%8A..as/input/case_042/white_model_all.png?authorization=bce-auth-v1%2FALTAK1iQCjzA1mKdTdSVqq4xtP%2F2026-05-08T06%3A35%3A23Z%2F3600%2F%2F489d5c06177ef549363287d2c87ad2b72d1e96546a329db2be125d3d41599d9b"
+                }
+            ],
+            "expected_output": null,
+            "model_outputs": {
+                "gemini-3.1-pro-preview-m-high-t-low": {
+                    "score": 60,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 15,
+                    "texel_density_score": 20,
+                    "grade": "medium",
+                    "issues": [
+                        "穿模",
+                        "沾黏"
+                    ]
+                },
+                "gemini-3.1-flash-lite-preview-m-high-t-low": {
+                    "score": 67,
+                    "uv_layout_score": 25,
+                    "seams_stretching_score": 17,
+                    "texel_density_score": 25,
+                    "grade": "medium",
+                    "issues": [
+                        "Clock face circular frame has a visible break/gap in the geometry"
+                    ]
+                },
+                "gemini-3.1-pro-preview-m-low-t-medium": {
+                    "score": 100,
+                    "uv_layout_score": 33,
+                    "seams_stretching_score": 33,
+                    "texel_density_score": 34,
+                    "grade": "good",
+                    "issues": []
+                }
+            }
+        }
+    ],
+    "output_spec": [
+        {
+            "name": "score",
+            "type": "int",
+            "description": "表面规整度最终得分，0-100分的整数"
+        },
+        {
+            "name": "uv_layout_score",
+            "type": "int",
+            "description": "UV结构合理度得分，0-33分的整数"
+        },
+        {
+            "name": "seams_stretching_score",
+            "type": "int",
+            "description": "接缝感/拉伸得分，0-33分的整数"
+        },
+        {
+            "name": "texel_density_score",
+            "type": "int",
+            "description": "像素密度均匀度得分，0-34分的整数"
+        },
+        {
+            "name": "grade",
+            "type": "string",
+            "description": "分类标签，仅为good/medium/bad中的一个"
+        },
+        {
+            "name": "issues",
+            "type": "list[str]",
+            "description": "扣分原因列表，无问题填空数组[]"
+        }
+    ]
+}

@@ -18,41 +18,47 @@ def import_glb(filepath):
     print(f"Clay: imported {filepath}")
 
 
-def create_clay_material():
+def setup_workbench_matcap(scene, matcap_name="clay_brown.exr"):
+    """Configure Workbench render engine with Solid MatCap shading."""
     import bpy
 
-    mat = bpy.data.materials.new(name="Clay_White")
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    nodes.clear()
+    shading = scene.display.shading
+    shading.light = 'MATCAP'
+    shading.color_type = 'MATERIAL'
 
-    output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (300, 0)
+    # Try to set the requested matcap
+    try:
+        shading.studio_light = matcap_name
+    except Exception:
+        print(f"Clay: matcap '{matcap_name}' not found, using default")
 
-    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-    bsdf.inputs["Base Color"].default_value = (0.85, 0.85, 0.85, 1.0)
-    bsdf.inputs["Roughness"].default_value = 0.6
-    bsdf.location = (0, 0)
+    print(f"Clay: Workbench matcap configured (light=MATCAP, color_type=MATERIAL, matcap={shading.studio_light})")
 
-    links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
+def create_simple_gray_material():
+    """Workbench only reads mat.diffuse_color — no nodes needed."""
+    import bpy
+
+    mat = bpy.data.materials.new(name="Clay_Gray")
+    mat.diffuse_color = (0.82, 0.82, 0.82, 1.0)
     return mat
 
 
 def apply_material_to_meshes(material):
+    """Apply material to all mesh objects."""
     import bpy
 
     applied = 0
     for obj in bpy.data.objects:
-        if obj.type != "MESH":
+        if obj.type != 'MESH':
             continue
         obj.data.materials.clear()
         obj.data.materials.append(material)
         applied += 1
 
-    print(f"Clay: applied to {applied} mesh(es)")
+    print(f"Clay: applied gray material to {applied} mesh(es)")
     return applied
+
 
 
 def get_bounding_box(mesh_objects):
@@ -131,49 +137,6 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     cam_data.clip_end = max(cam_data.clip_end, distance * 3)
 
 
-def ensure_lighting(scene):
-    import bpy
-    import mathutils
-
-    has_light = any(obj.type == "LIGHT" for obj in scene.objects)
-    if has_light:
-        return
-
-    # Key light
-    key = bpy.data.lights.new(name="Clay_Key", type="SUN")
-    key.energy = 3.0
-    key_obj = bpy.data.objects.new("Clay_Key", key)
-    key_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
-    scene.collection.objects.link(key_obj)
-
-    # Fill light
-    fill = bpy.data.lights.new(name="Clay_Fill", type="SUN")
-    fill.energy = 1.5
-    fill_obj = bpy.data.objects.new("Clay_Fill", fill)
-    fill_obj.rotation_euler = mathutils.Euler((-0.5, -0.8, -0.3))
-    scene.collection.objects.link(fill_obj)
-
-
-def resolve_engine(name):
-    import bpy
-
-    available = set()
-    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
-        available.add(engine.identifier)
-
-    if name in available:
-        return name
-
-    aliases = {
-        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
-        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
-    }
-    alt = aliases.get(name)
-    if alt and alt in available:
-        return alt
-
-    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
-
 
 def main() -> None:
     import bpy
@@ -197,38 +160,23 @@ def main() -> None:
     spec.loader.exec_module(rv)
     rv.normalize_model(bpy)
 
-    material = create_clay_material()
-    apply_material_to_meshes(material)
-
     scene = bpy.context.scene
     render = scene.render
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
+    render.engine = 'BLENDER_WORKBENCH'
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)
 
     fmt = config.get("output_format", "PNG")
     render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
+    render.image_settings.color_mode = 'RGB'
 
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+    matcap_name = opts.get("matcap", "basic_1.exr")
+    setup_workbench_matcap(scene, matcap_name)
 
-    # Light gray background for ambient lighting
-    world = scene.world
-    if not world:
-        world = bpy.data.worlds.new("Clay_World")
-        scene.world = world
-    world.use_nodes = True
-    bg = world.node_tree.nodes.get("Background")
-    if bg:
-        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
-        bg.inputs["Strength"].default_value = 1.0
+    mat = create_simple_gray_material()
+    apply_material_to_meshes(mat)
 
     mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
     if not mesh_objects:
@@ -237,7 +185,6 @@ def main() -> None:
 
     center, bbox_size = get_bounding_box(mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
-    ensure_lighting(scene)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Clay")
 
