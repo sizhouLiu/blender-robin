@@ -62,28 +62,6 @@ def apply_material_to_meshes(material):
     return applied
 
 
-
-def get_bounding_box(mesh_objects):
-    import mathutils
-
-    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
-    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
-
-    for obj in mesh_objects:
-        for corner in obj.bound_box:
-            world_corner = obj.matrix_world @ mathutils.Vector(corner)
-            min_co.x = min(min_co.x, world_corner.x)
-            min_co.y = min(min_co.y, world_corner.y)
-            min_co.z = min(min_co.z, world_corner.z)
-            max_co.x = max(max_co.x, world_corner.x)
-            max_co.y = max(max_co.y, world_corner.y)
-            max_co.z = max(max_co.z, world_corner.z)
-
-    center = (min_co + max_co) / 2
-    bbox_size = max_co - min_co
-    return center, bbox_size
-
-
 def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     import bpy
     import mathutils
@@ -185,7 +163,7 @@ def main() -> None:
         print("Clay: no mesh objects found")
         return
 
-    center, bbox_size = get_bounding_box(mesh_objects)
+    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Clay")

@@ -82,10 +82,11 @@ def hash_select_env_texture(model_id: str):
 def normalize_model(bpy, target_size=2.0):
     """
     Normalize imported model: center at origin and scale to target_size.
-    Handles parent-child hierarchies by operating on root objects only.
+    Uses evaluated depsgraph to handle armature/shape-key deformations.
     """
     import mathutils
 
+    depsgraph = bpy.context.evaluated_depsgraph_get()
     mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
     if not mesh_objects:
         print("Normalize: no mesh objects found")
@@ -95,14 +96,20 @@ def normalize_model(bpy, target_size=2.0):
     max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
 
     for obj in mesh_objects:
-        for corner in obj.bound_box:
-            world_corner = obj.matrix_world @ mathutils.Vector(corner)
-            min_co.x = min(min_co.x, world_corner.x)
-            min_co.y = min(min_co.y, world_corner.y)
-            min_co.z = min(min_co.z, world_corner.z)
-            max_co.x = max(max_co.x, world_corner.x)
-            max_co.y = max(max_co.y, world_corner.y)
-            max_co.z = max(max_co.z, world_corner.z)
+        obj_eval = obj.evaluated_get(depsgraph)
+        mesh_eval = obj_eval.to_mesh()
+        if mesh_eval is None:
+            continue
+        mat = obj_eval.matrix_world
+        for v in mesh_eval.vertices:
+            world_co = mat @ v.co
+            min_co.x = min(min_co.x, world_co.x)
+            min_co.y = min(min_co.y, world_co.y)
+            min_co.z = min(min_co.z, world_co.z)
+            max_co.x = max(max_co.x, world_co.x)
+            max_co.y = max(max_co.y, world_co.y)
+            max_co.z = max(max_co.z, world_co.z)
+        obj_eval.to_mesh_clear()
 
     center = (min_co + max_co) / 2
     bbox_size = max_co - min_co
@@ -114,16 +121,56 @@ def normalize_model(bpy, target_size=2.0):
 
     scale_factor = target_size / max_dim
 
-    all_objects = list(bpy.context.scene.objects)
-    root_objects = [obj for obj in all_objects if obj.parent is None]
-
+    root_objects = [obj for obj in bpy.context.scene.objects if obj.parent is None]
     for obj in root_objects:
-        obj.location -= center
+        obj.location = (obj.location - center) * scale_factor
         obj.scale *= scale_factor
 
     bpy.context.view_layer.update()
 
+    # Force depsgraph re-evaluation for armature models
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    depsgraph.update()
+
     print(f"Normalize: centered and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
+
+
+def get_bounding_box_evaluated(bpy, mesh_objects):
+    """
+    Compute world-space bounding box using evaluated mesh data.
+    Accounts for armature deformation, shape keys, and all modifiers.
+    Returns (center, bbox_size).
+    """
+    import mathutils
+
+    # Force depsgraph update to ensure transforms are current (critical after normalize_model)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    depsgraph.update()
+    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
+    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
+
+    for obj in mesh_objects:
+        obj_eval = obj.evaluated_get(depsgraph)
+        mesh_eval = obj_eval.to_mesh()
+        if mesh_eval is None:
+            continue
+        mat = obj_eval.matrix_world
+        for v in mesh_eval.vertices:
+            world_co = mat @ v.co
+            min_co.x = min(min_co.x, world_co.x)
+            min_co.y = min(min_co.y, world_co.y)
+            min_co.z = min(min_co.z, world_co.z)
+            max_co.x = max(max_co.x, world_co.x)
+            max_co.y = max(max_co.y, world_co.y)
+            max_co.z = max(max_co.z, world_co.z)
+        obj_eval.to_mesh_clear()
+
+    center = (min_co + max_co) / 2
+    bbox_size = max_co - min_co
+    print(f"BBox: center=({center.x:.4f}, {center.y:.4f}, {center.z:.4f}), "
+          f"size=({bbox_size.x:.4f}, {bbox_size.y:.4f}, {bbox_size.z:.4f})")
+    return center, bbox_size
 
 
 # ── Camera helpers ────────────────────────────────────────────────────────
@@ -311,28 +358,45 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     # --- Random closeups ---
     if closeup_count > 0:
         mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+        depsgraph = bpy.context.evaluated_depsgraph_get()
         bbox_diagonal = bbox_size.length
         closeup_ratio = 0.10
         sub_radius = bbox_diagonal * closeup_ratio / 2.0
 
         verts_world = []
         for obj in mesh_objects:
-            mat = obj.matrix_world
-            for v in obj.data.vertices:
+            obj_eval = obj.evaluated_get(depsgraph)
+            mesh_eval = obj_eval.to_mesh()
+            if mesh_eval is None:
+                continue
+            mat = obj_eval.matrix_world
+            for v in mesh_eval.vertices:
                 verts_world.append(mat @ v.co)
+            obj_eval.to_mesh_clear()
+
+        # Filter: only keep vertices within 80% of bbox from center
+        inner_half = bbox_size * 0.4
+        verts_inner = [
+            v for v in verts_world
+            if abs(v.x - center.x) <= inner_half.x
+            and abs(v.y - center.y) <= inner_half.y
+            and abs(v.z - center.z) <= inner_half.z
+        ]
+        if len(verts_inner) < 10:
+            verts_inner = verts_world
 
         min_dist = bbox_diagonal * closeup_ratio * 0.8
         chosen_points = []
-        max_attempts = 100
+        max_attempts = 300
 
         cam_data.type = 'PERSP'
         for ci in range(closeup_count):
             closeup_suffix = f"_closeup{ci + 1}"
 
             focus_point = center
-            if verts_world:
+            if verts_inner:
                 for _ in range(max_attempts):
-                    candidate = random.choice(verts_world)
+                    candidate = random.choice(verts_inner)
                     if not chosen_points:
                         focus_point = candidate
                         break
@@ -341,7 +405,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                         focus_point = candidate
                         break
                 else:
-                    focus_point = random.choice(verts_world)
+                    focus_point = random.choice(verts_inner)
             chosen_points.append(focus_point)
             sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
 

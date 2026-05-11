@@ -4,7 +4,7 @@
     1920,
     1920
   ],
-  "parallel": 6,
+  "parallel": 4,
   "views": [
     "diagonal",
     "front",

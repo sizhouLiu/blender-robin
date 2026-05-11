@@ -597,6 +597,67 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
         click.echo(f"  [{status}] {r.blend_file.name}")
 
 
+# ── normalize ───────────────────────────────────────────────────────────
+
+@cli.command("normalize")
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), default="./normalized_output", help="Output directory.")
+@click.option("--target-size", type=float, default=2.0, show_default=True,
+              help="Normalize longest axis to this size.")
+@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--parallel", "-j", default=1, type=int, help="Max parallel processes.")
+@click.option("--dry-run", is_flag=True, help="Print commands without executing.")
+@click.pass_context
+def normalize(ctx: click.Context, directory: str, output: str, target_size: float,
+              pattern: str, parallel: int, dry_run: bool) -> None:
+    """Normalize all GLB files in a directory: center at origin and scale to --target-size."""
+    output_dir = Path(output)
+    dir_path = Path(directory)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    model_files = sorted(dir_path.glob(pattern))
+    if not model_files:
+        click.echo(f"No files matching '{pattern}' found in {directory}")
+        return
+
+    configs = []
+    for i, model_file in enumerate(model_files, 1):
+        case_dir = output_dir / "input" / f"case_{i:03d}"
+        output_glb = case_dir / f"{model_file.stem}_normalized.glb"
+        cfg = RenderConfig(
+            blend_file=model_file,
+            output_dir=case_dir,
+            use_script=True,
+            script_name="normalize_export.py",
+            script_options={
+                "glb_file": str(model_file),
+                "output_path": str(output_glb),
+                "target_size": target_size,
+            },
+        )
+        configs.append(cfg)
+
+    renderer = _get_renderer(ctx, with_progress=False)
+
+    if dry_run:
+        for cfg in configs:
+            cmd = renderer.build_command(cfg)
+            click.echo(" ".join(cmd))
+        return
+
+    click.echo(f"Normalizing {len(configs)} file(s) (target_size={target_size})...")
+    processor = BatchProcessor(renderer, max_parallel=parallel)
+    result = processor.process(configs)
+    click.echo()
+    click.echo(
+        f"Done. {result.succeeded}/{result.total} succeeded, "
+        f"{result.failed} failed, {result.elapsed_seconds:.1f}s total"
+    )
+    for r in result.results:
+        status = "OK" if r.success else "FAIL"
+        click.echo(f"  [{status}] {r.blend_file.name}")
+
+
 # ── queue ───────────────────────────────────────────────────────────────
 
 @cli.group()
