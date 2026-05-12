@@ -1,0 +1,13 @@
+{
+  "engine": "BLENDER_EEVEE_NEXT",
+  "resolution_x": 1920,
+  "resolution_y": 1920,
+  "resolution_percentage": 100,
+  "output_format": "PNG",
+  "output_dir": "D:/test_albedo_output",
+  "filename_pattern": "albedo_test",
+  "script_options": {
+    "glb_file": "D:/带骨骼动画/fb919b3d262b40958449d7f3ccad3ab8.glb",
+    "views": ["diagonal"]
+  }
+}

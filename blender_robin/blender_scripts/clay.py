@@ -158,7 +158,7 @@ def main() -> None:
     mat = create_simple_gray_material()
     apply_material_to_meshes(mat)
 
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("Clay: no mesh objects found")
         return

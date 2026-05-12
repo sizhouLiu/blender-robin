@@ -1,7 +1,11 @@
 """
-Blender script for wireframe-on-white rendering from GLB/GLTF files.
+Blender script for wireframe rendering from GLB/GLTF files.
 Runs INSIDE Blender's Python interpreter.
 Invoked via: blender --background --python wireframe.py -- <json_config>
+
+Supports two modes via script_options.wireframe_mode:
+  - "material" (default): White clay material with black wireframe overlay (shader-based)
+  - "workbench": Workbench engine with wireframe overlay on white model
 """
 import json
 import math
@@ -18,7 +22,7 @@ def import_glb(filepath):
     print(f"Wireframe: imported {filepath}")
 
 
-def create_wireframe_material():
+def create_wireframe_material(wire_size=1.5):
     """White base + black wireframe overlay using Wireframe node."""
     import bpy
 
@@ -31,23 +35,19 @@ def create_wireframe_material():
     output = nodes.new("ShaderNodeOutputMaterial")
     output.location = (600, 0)
 
-    # White base shader
     white_bsdf = nodes.new("ShaderNodeBsdfDiffuse")
     white_bsdf.inputs["Color"].default_value = (0.9, 0.9, 0.9, 1.0)
     white_bsdf.location = (0, 100)
 
-    # Black wireframe shader
     wire_bsdf = nodes.new("ShaderNodeBsdfDiffuse")
     wire_bsdf.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
     wire_bsdf.location = (0, -100)
 
-    # Wireframe node as mix factor
     wireframe = nodes.new("ShaderNodeWireframe")
-    wireframe.inputs["Size"].default_value = 1.5
+    wireframe.inputs["Size"].default_value = wire_size
     wireframe.use_pixel_size = True
     wireframe.location = (-200, -200)
 
-    # Mix: white where no wire, black on wire edges
     mix = nodes.new("ShaderNodeMixShader")
     mix.location = (300, 0)
 
@@ -70,8 +70,27 @@ def apply_material_to_meshes(material):
         obj.data.materials.append(material)
         applied += 1
 
-    print(f"Wireframe: applied to {applied} mesh(es)")
+    print(f"Wireframe: applied material to {applied} mesh(es)")
     return applied
+
+
+def setup_workbench_wireframe(opts):
+    """Configure Workbench engine with white model + wireframe overlay."""
+    import bpy
+
+    scene = bpy.context.scene
+    scene.render.engine = 'BLENDER_WORKBENCH'
+
+    shading = scene.display.shading
+    shading.light = 'STUDIO'
+    shading.color_type = 'SINGLE'
+    shading.single_color = (0.9, 0.9, 0.9)
+    shading.show_xray_wireframe = True
+    shading.xray_alpha_wireframe = 0.0
+
+    scene.render.film_transparent = True
+
+    print("Wireframe: Workbench engine configured with wireframe overlay")
 
 
 def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
@@ -166,37 +185,6 @@ def resolve_engine(name):
     return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
 
 
-def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
-    """Frame a closeup region, same as rgb_closeup logic."""
-    import mathutils
-
-    cam_data = camera.data
-    radius = bbox_size.length / 2.0
-    aspect = resolution_x / resolution_y
-    fov = cam_data.angle
-
-    if aspect >= 1.0:
-        vfov = 2.0 * math.atan(math.tan(fov / 2.0) / aspect)
-    else:
-        vfov = fov
-
-    half_angle = min(fov / 2.0, vfov / 2.0)
-    distance = radius / math.sin(half_angle) * 1.15
-
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
-    camera.location = center + direction * distance
-
-    look_dir = center - camera.location
-    rot_quat = look_dir.to_track_quat('-Z', 'Y')
-    camera.rotation_euler = rot_quat.to_euler()
-
-    cam_data.clip_start = max(0.001, distance * 0.01)
-    cam_data.clip_end = distance * 5
-
-    print(f"Wireframe: closeup, bbox size {bbox_size.length:.2f}, distance {distance:.2f}")
-    return camera
-
-
 def main() -> None:
     import bpy
 
@@ -219,20 +207,9 @@ def main() -> None:
     spec.loader.exec_module(rv)
     rv.normalize_model(bpy)
 
-    # Create and apply wireframe material
-    wire_size = opts.get("wire_size", 1.5)
-    material = create_wireframe_material()
-    for node in material.node_tree.nodes:
-        if node.type == "WIREFRAME":
-            node.inputs["Size"].default_value = wire_size
-            node.use_pixel_size = True
-    apply_material_to_meshes(material)
-
     scene = bpy.context.scene
     render = scene.render
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)
@@ -242,30 +219,45 @@ def main() -> None:
     render.image_settings.color_mode = 'RGBA'
     render.film_transparent = True
 
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+    wireframe_mode = opts.get("wireframe_mode", "material")
 
-    # White background
-    world = scene.world
-    if not world:
-        world = bpy.data.worlds.new("Wire_World")
-        scene.world = world
-    world.use_nodes = True
-    bg = world.node_tree.nodes.get("Background")
-    if bg:
-        bg.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1.0)
-        bg.inputs["Strength"].default_value = 1.0
+    if wireframe_mode == "workbench":
+        # Workbench engine: white model + wireframe overlay
+        setup_workbench_wireframe(opts)
+    else:
+        # Material mode: shader-based wireframe on white clay
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = resolve_engine(engine)
 
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
+
+        wire_size = opts.get("wire_size", 1.5)
+        material = create_wireframe_material(wire_size)
+        apply_material_to_meshes(material)
+
+        # Gray background
+        world = scene.world
+        if not world:
+            world = bpy.data.worlds.new("Wire_World")
+            scene.world = world
+        world.use_nodes = True
+        bg = world.node_tree.nodes.get("Background")
+        if bg:
+            bg.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1.0)
+            bg.inputs["Strength"].default_value = 1.0
+
+        ensure_lighting(scene)
+
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("Wireframe: no mesh objects found")
         return
 
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
-    ensure_lighting(scene)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Wireframe")
 

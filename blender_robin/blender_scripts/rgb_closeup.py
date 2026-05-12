@@ -195,7 +195,7 @@ def main() -> None:
         bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("RGB Closeup: no mesh objects found")
         return

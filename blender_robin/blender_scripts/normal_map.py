@@ -3,9 +3,7 @@ Blender script for surface normal map rendering from GLB/GLTF files.
 Runs INSIDE Blender's Python interpreter.
 Invoked via: blender --background --python normal_map.py -- <json_config>
 
-Uses Blender's built-in Normal render pass — no material override needed.
-Outputs normals as RGB color: X→R, Y→G, Z→B, remapped from [-1,1] to [0,1].
-Flat surface facing camera ≈ (0.5, 0.5, 1.0) = classic light-blue normal map.
+Uses Workbench engine with built-in check_normal+y.exr MatCap for normal visualization.
 """
 import json
 import math
@@ -22,53 +20,41 @@ def import_glb(filepath):
     print(f"NormalMap: imported {filepath}")
 
 
-def setup_normal_compositor(output_dir, base_name):
-    """Enable Normal pass and output via compositor with remapping."""
+def setup_workbench_normal(opts):
+    """Configure Workbench engine with normal MatCap."""
     import bpy
 
     scene = bpy.context.scene
-    scene.render.use_compositing = True
-    scene.use_nodes = True
-    bpy.context.view_layer.use_pass_normal = True
+    scene.render.engine = 'BLENDER_WORKBENCH'
 
-    tree = scene.node_tree
-    tree.nodes.clear()
+    shading = scene.display.shading
+    shading.light = 'MATCAP'
+    shading.studio_light = 'check_normal+y.exr'
+    shading.color_type = 'MATERIAL'
 
-    rl = tree.nodes.new("CompositorNodeRLayers")
-    rl.location = (0, 0)
+    scene.render.film_transparent = True
 
-    # Remap normal from [-1,1] → [0,1]: multiply by 0.5 then add 0.5
-    multiply = tree.nodes.new("CompositorNodeMixRGB")
-    multiply.blend_type = 'MULTIPLY'
-    multiply.inputs[0].default_value = 1.0  # Factor
-    multiply.inputs[2].default_value = (0.5, 0.5, 0.5, 1.0)
-    multiply.location = (300, 0)
+    # Optional wireframe overlay
+    if opts.get("show_wireframe", False):
+        shading.show_xray = False
+        scene.display.shading.show_xray_wireframe = False
+        # Workbench wireframe overlay via render settings
+        scene.display.render_aa = 'OFF'
 
-    add = tree.nodes.new("CompositorNodeMixRGB")
-    add.blend_type = 'ADD'
-    add.inputs[0].default_value = 1.0
-    add.inputs[2].default_value = (0.5, 0.5, 0.5, 0.0)
-    add.location = (500, 0)
+    print("NormalMap: Workbench engine configured with check_normal+y.exr MatCap")
 
-    tree.links.new(rl.outputs["Normal"], multiply.inputs[1])
-    tree.links.new(multiply.outputs["Image"], add.inputs[1])
 
-    # Combine with original alpha
-    alpha_node = tree.nodes.new("CompositorNodeSetAlpha")
-    alpha_node.location = (700, 0)
-    tree.links.new(add.outputs["Image"], alpha_node.inputs["Image"])
-    tree.links.new(rl.outputs["Alpha"], alpha_node.inputs["Alpha"])
+def apply_flat_shading():
+    """Apply flat shading to all mesh objects."""
+    import bpy
 
-    file_output = tree.nodes.new("CompositorNodeOutputFile")
-    file_output.base_path = output_dir
-    file_output.location = (900, 0)
-    file_output.format.file_format = scene.render.image_settings.file_format
-    file_output.format.color_mode = "RGBA"
-    file_output.file_slots[0].path = base_name + "_normal"
-    file_output.file_slots[0].use_node_format = True
-    tree.links.new(alpha_node.outputs["Image"], file_output.inputs["Image"])
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH':
+            for poly in obj.data.polygons:
+                poly.use_smooth = False
+            obj.data.update()
 
-    print("NormalMap: compositor set up for Normal pass")
+    print("NormalMap: applied flat shading")
 
 
 def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
@@ -121,27 +107,6 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     return camera
 
 
-def resolve_engine(name):
-    import bpy
-
-    available = set()
-    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
-        available.add(engine.identifier)
-
-    if name in available:
-        return name
-
-    aliases = {
-        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
-        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
-    }
-    alt = aliases.get(name)
-    if alt and alt in available:
-        return alt
-
-    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
-
-
 def main() -> None:
     import bpy
 
@@ -164,15 +129,12 @@ def main() -> None:
     spec.loader.exec_module(rv)
     rv.normalize_model(bpy)
 
-    # Apply flat shading if requested (cleaner normal visualization)
-    if opts.get("flat_shading"):
-        rv.shade_flat()
+    if opts.get("flat_shading", True):
+        apply_flat_shading()
 
     scene = bpy.context.scene
     render = scene.render
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)
@@ -180,40 +142,16 @@ def main() -> None:
     fmt = config.get("output_format", "PNG")
     render.image_settings.file_format = fmt
     render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
 
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+    setup_workbench_normal(opts)
 
-    # HDR environment or simple dark background
-    hdri_path = opts.get("hdri_path")
-    env_texture = opts.get("env_texture")
-    if hdri_path:
-        rv.setup_hdri_world(hdri_path, env_texture)
-    else:
-        world = scene.world
-        if not world:
-            world = bpy.data.worlds.new("Normal_World")
-            scene.world = world
-        world.use_nodes = True
-        bg = world.node_tree.nodes.get("Background")
-        if bg:
-            bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
-            bg.inputs["Strength"].default_value = 0.0
-
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("NormalMap: no mesh objects found")
         return
 
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
-
-    output_dir = config.get("output_dir", "./output")
-    base_name = config.get("filename_pattern", "normal")
-    setup_normal_compositor(output_dir, base_name)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "NormalMap")
 

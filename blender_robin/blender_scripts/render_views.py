@@ -79,6 +79,29 @@ def hash_select_env_texture(model_id: str):
 
 # ── Model normalization ───────────────────────────────────────────────────
 
+def _get_model_mesh_objects(bpy):
+    """
+    Get mesh objects that belong to the imported model hierarchy.
+    Excludes orphan/helper meshes (like Icosphere) that are not part of the main model tree.
+    Strategy: find the primary root (deepest hierarchy), collect all meshes under it.
+    If all meshes are roots, return all of them.
+    """
+    all_meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    if not all_meshes:
+        return []
+
+    # Separate meshes that have a parent chain vs orphan root meshes
+    parented_meshes = [obj for obj in all_meshes if obj.parent is not None]
+
+    if parented_meshes:
+        # If there are parented meshes, those are the real model.
+        # Orphan root meshes (like Icosphere) are likely helpers/artifacts.
+        return parented_meshes
+
+    # All meshes are roots - return all
+    return all_meshes
+
+
 def normalize_model(bpy, target_size=2.0):
     """
     Normalize imported model: center at origin and scale to target_size.
@@ -87,7 +110,7 @@ def normalize_model(bpy, target_size=2.0):
     import mathutils
 
     depsgraph = bpy.context.evaluated_depsgraph_get()
-    mesh_objects = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    mesh_objects = _get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("Normalize: no mesh objects found")
         return
@@ -357,7 +380,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
 
     # --- Random closeups ---
     if closeup_count > 0:
-        mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+        mesh_objects = _get_model_mesh_objects(bpy)
         depsgraph = bpy.context.evaluated_depsgraph_get()
         bbox_diagonal = bbox_size.length
         closeup_ratio = 0.10
