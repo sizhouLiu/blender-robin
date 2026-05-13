@@ -80,6 +80,7 @@ DEFAULT_CONFIG = {
     "env_texture": "",
     "export_metadata": False,
     "wireframe_mode": "clay",
+    "animation_frame": None,
 }
 
 
@@ -214,6 +215,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     env_texture = cfg.get("env_texture", "")
     export_metadata = cfg.get("export_metadata", False)
     wireframe_mode = cfg.get("wireframe_mode", "clay")
+    animation_frame = cfg.get("animation_frame", None)
 
     args = [
         "--blender", str(blender_path),
@@ -237,6 +239,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args += ["--env-texture", env_texture]
     if export_metadata:
         args.append("--export-metadata")
+    if animation_frame is not None:
+        args += ["--animation-frame", str(animation_frame)]
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
     if command == "wireframe":
@@ -257,6 +261,7 @@ def edit_config(cfg):
             (f"分辨率: {cfg.get('resolution', [1920,1080])[0]}x{cfg.get('resolution', [1920,1080])[1]}", "resolution"),
             (f"渲染视角数: {len(cfg.get('views', all_views))}", "views"),
             (f"特写数量: {cfg.get('closeup_count', 1)}", "closeup"),
+            (f"动画帧: {cfg.get('animation_frame', '(默认第1帧)')}", "animation_frame"),
             (f"拼合大图: {'是' if cfg.get('composite', True) else '否'}", "composite"),
             (f"删除非特写图: {'是' if cfg.get('delete_views', False) else '否'}", "delete_views"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
@@ -312,6 +317,21 @@ def edit_config(cfg):
             if raw.isdigit():
                 cfg["closeup_count"] = int(raw)
                 print(f"  {GREEN}已更新{RESET}\n")
+
+        elif key == "animation_frame":
+            cur = cfg.get("animation_frame", None)
+            cur_str = str(cur) if cur is not None else "(默认第1帧)"
+            sys.stdout.write(f"\n  {CYAN}动画帧 (当前 {cur_str}, 输入帧号如 30, 留空恢复默认): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            if raw == "":
+                cfg["animation_frame"] = None
+                print(f"  {GREEN}已恢复默认 (第1帧){RESET}\n")
+            elif raw.isdigit() and int(raw) >= 1:
+                cfg["animation_frame"] = int(raw)
+                print(f"  {GREEN}已更新为第 {raw} 帧{RESET}\n")
+            else:
+                print(f"  {YELLOW}请输入正整数{RESET}\n")
 
         elif key == "composite":
             cur = cfg.get("composite", True)

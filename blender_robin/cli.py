@@ -169,6 +169,7 @@ def _common_render_options(f):
     f = click.option("--hdri", type=click.Path(), default=None, help="Path to HDRI .exr environment textures folder.")(f)
     f = click.option("--env-texture", type=str, default=None, help="Specific HDRI file name to use.")(f)
     f = click.option("--export-metadata", is_flag=True, help="Export meta.json with camera matrices.")(f)
+    f = click.option("--animation-frame", type=int, default=None, help="Frame number to render for animated models (default: 1).")(f)
     f = click.option("--format", "-F", "output_format", default="PNG",
                      type=click.Choice(["PNG", "JPEG", "WEBP", "EXR", "TIFF", "BMP"], case_sensitive=False),
                      help="Output image format.")(f)
@@ -176,7 +177,7 @@ def _common_render_options(f):
 
 
 def _build_script_options(glb_file, views, closeup_count, no_composite, delete_views,
-                         hdri, env_texture, export_metadata, **extra):
+                         hdri, env_texture, export_metadata, animation_frame, **extra):
     opts = {
         "glb_file": str(glb_file),
         "closeup_count": closeup_count,
@@ -190,6 +191,8 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
         opts["hdri_path"] = hdri
         if env_texture:
             opts["env_texture"] = env_texture
+    if animation_frame is not None:
+        opts["animation_frame"] = animation_frame
     opts.update(extra)
     return opts
 
@@ -211,7 +214,7 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
              style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
              delete_views: bool, hdri: str | None, env_texture: str | None,
-             export_metadata: bool, output_format: str,
+             export_metadata: bool, animation_frame: int | None, output_format: str,
              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render UV checker maps for all GLB/GLTF files in a directory."""
     output_dir = Path(output)
@@ -238,7 +241,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
             filename_pattern="checkerboard",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
                 style=style, scale=scale,
             ),
         )
@@ -278,7 +281,8 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.pass_context
 def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
                 views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-                hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+                hdri: str | None, env_texture: str | None, export_metadata: bool,
+                animation_frame: int | None, output_format: str,
                 pattern: str, parallel: int, dry_run: bool) -> None:
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -305,7 +309,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
             filename_pattern="texture_fidelity",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
             ),
         )
         configs.append(cfg)
@@ -350,8 +354,8 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
               wire_size: float, wireframe_mode: str, views: str | None, closeup_count: int,
               no_composite: bool, delete_views: bool, hdri: str | None, env_texture: str | None,
-              export_metadata: bool, output_format: str, pattern: str, parallel: int,
-              dry_run: bool) -> None:
+              export_metadata: bool, animation_frame: int | None, output_format: str,
+              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render wireframe-on-white for all GLB/GLTF files.
 
     Four modes available:
@@ -388,7 +392,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
             filename_pattern="topology",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
                 wire_size=wire_size,
                 wireframe_mode=wireframe_mode.lower(),
             ),
@@ -430,7 +434,8 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
          matcap: str, views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-         hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+         hdri: str | None, env_texture: str | None, export_metadata: bool,
+         animation_frame: int | None, output_format: str,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -457,7 +462,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             filename_pattern="white_model",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
                 matcap=matcap,
             ),
         )
@@ -497,7 +502,8 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
 @click.pass_context
 def normal_map(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
                views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-               hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+               hdri: str | None, env_texture: str | None, export_metadata: bool,
+               animation_frame: int | None, output_format: str,
                pattern: str, parallel: int, dry_run: bool) -> None:
     """Render surface normal maps (camera-space) for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -524,7 +530,7 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
             filename_pattern="normal_map",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
             ),
         )
         configs.append(cfg)
@@ -563,7 +569,8 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
 @click.pass_context
 def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
            views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-           hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
+           hdri: str | None, env_texture: str | None, export_metadata: bool,
+           animation_frame: int | None, output_format: str,
            pattern: str, parallel: int, dry_run: bool) -> None:
     """Render albedo (diffuse color, no lighting) for all GLB/GLTF files."""
     output_dir = Path(output)
@@ -590,7 +597,7 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
             filename_pattern="albedo",
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
-                hdri, env_texture, export_metadata,
+                hdri, env_texture, export_metadata, animation_frame,
             ),
         )
         configs.append(cfg)

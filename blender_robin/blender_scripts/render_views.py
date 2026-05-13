@@ -279,6 +279,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     do_composite = opts.get("composite", True)
     delete_views_after_composite = opts.get("delete_views_after_composite", False)
     export_meta = opts.get("export_metadata", False)
+    animation_frame = opts.get("animation_frame", 1)  # Default to frame 1
 
     camera = scene.camera
     if not camera:
@@ -373,7 +374,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
 
         filepath = f"{output_dir}/{base_name}{suffix}"
         render.filepath = filepath
-        scene.frame_set(1)
+        scene.frame_set(animation_frame)
         bpy.ops.render.render(write_still=True)
         view_files.append(f"{base_name}{suffix}")
         print(f"{label}: {view_name} rendered to {filepath}")

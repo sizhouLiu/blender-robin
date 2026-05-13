@@ -87,16 +87,94 @@ def apply_flat_shading():
     print("Wireframe: applied flat shading")
 
 
-def create_matcap_wireframe_material(wire_size=1.5, use_normal_matcap=False):
-    """Create EEVEE material that uses MatCap texture + black wireframe overlay.
+def _load_matcap_image(bpy, matcap_name):
+    """Search Blender's installation for a MatCap .exr file and load it."""
+    import os
+
+    img = bpy.data.images.get(matcap_name)
+    if img:
+        return img
+
+    blender_dir = os.path.dirname(bpy.app.binary_path)
+    for root, dirs, files in os.walk(blender_dir):
+        if matcap_name in files:
+            path = os.path.join(root, matcap_name)
+            img = bpy.data.images.load(path)
+            print(f"Wireframe: Loaded MatCap from {path}")
+            return img
+
+    print(f"Wireframe: MatCap '{matcap_name}' not found in Blender installation")
+    return None
+
+
+def _build_matcap_emission_nodes(nodes, links, img):
+    """Build camera-space normal → UV → MatCap texture → Emission node chain.
+    Returns the matcap_emission node.
+    """
+    geometry = nodes.new("ShaderNodeNewGeometry")
+    geometry.location = (-600, -50)
+
+    vector_transform = nodes.new("ShaderNodeVectorTransform")
+    vector_transform.vector_type = 'NORMAL'
+    vector_transform.convert_from = 'WORLD'
+    vector_transform.convert_to = 'CAMERA'
+    vector_transform.location = (-400, -50)
+
+    separate_xyz = nodes.new("ShaderNodeSeparateXYZ")
+    separate_xyz.location = (-200, -50)
+
+    math_add_x = nodes.new("ShaderNodeMath")
+    math_add_x.operation = 'ADD'
+    math_add_x.inputs[1].default_value = 1.0
+    math_add_x.location = (0, 50)
+
+    math_scale_x = nodes.new("ShaderNodeMath")
+    math_scale_x.operation = 'MULTIPLY'
+    math_scale_x.inputs[1].default_value = 0.5
+    math_scale_x.location = (150, 50)
+
+    math_add_y = nodes.new("ShaderNodeMath")
+    math_add_y.operation = 'ADD'
+    math_add_y.inputs[1].default_value = 1.0
+    math_add_y.location = (0, -50)
+
+    math_scale_y = nodes.new("ShaderNodeMath")
+    math_scale_y.operation = 'MULTIPLY'
+    math_scale_y.inputs[1].default_value = 0.5
+    math_scale_y.location = (150, -50)
+
+    combine_xy = nodes.new("ShaderNodeCombineXYZ")
+    combine_xy.location = (300, 0)
+
+    img_tex = nodes.new("ShaderNodeTexImage")
+    img_tex.image = img
+    img_tex.location = (450, 100)
+
+    matcap_emission = nodes.new("ShaderNodeEmission")
+    matcap_emission.location = (650, 100)
+
+    links.new(geometry.outputs["Normal"], vector_transform.inputs["Vector"])
+    links.new(vector_transform.outputs["Vector"], separate_xyz.inputs["Vector"])
+    links.new(separate_xyz.outputs["X"], math_add_x.inputs[0])
+    links.new(math_add_x.outputs["Value"], math_scale_x.inputs[0])
+    links.new(separate_xyz.outputs["Y"], math_add_y.inputs[0])
+    links.new(math_add_y.outputs["Value"], math_scale_y.inputs[0])
+    links.new(math_scale_x.outputs["Value"], combine_xy.inputs["X"])
+    links.new(math_scale_y.outputs["Value"], combine_xy.inputs["Y"])
+    links.new(combine_xy.outputs["Vector"], img_tex.inputs["Vector"])
+    links.new(img_tex.outputs["Color"], matcap_emission.inputs["Color"])
+
+    return matcap_emission
+
+
+def create_matcap_wireframe_material(wire_size=1.5, matcap_name="basic_1.exr"):
+    """Create EEVEE material: MatCap texture sampled via camera-space normals + black wireframe.
 
     Args:
         wire_size: Wireframe line thickness in pixels
-        use_normal_matcap: If True, loads check_normal+y.exr MatCap
-                          If False, uses simple gray emission
+        matcap_name: MatCap .exr filename (e.g. 'basic_1.exr', 'check_normal+y.exr')
     """
     import bpy
-    import os
 
     mat = bpy.data.materials.new(name="MatCap_Wireframe")
     mat.use_nodes = True
@@ -104,119 +182,15 @@ def create_matcap_wireframe_material(wire_size=1.5, use_normal_matcap=False):
     links = mat.node_tree.links
     nodes.clear()
 
-    # Output node
     output = nodes.new("ShaderNodeOutputMaterial")
     output.location = (800, 0)
 
-    if use_normal_matcap:
-        # Load check_normal+y.exr MatCap texture
-        blender_dir = os.path.dirname(bpy.app.binary_path)
-        matcap_path = None
+    img = _load_matcap_image(bpy, matcap_name)
 
-        # Search for check_normal+y.exr in Blender installation
-        for root, dirs, files in os.walk(blender_dir):
-            if 'check_normal+y.exr' in files:
-                matcap_path = os.path.join(root, 'check_normal+y.exr')
-                break
-
-        # Create or reuse image
-        img = bpy.data.images.get("check_normal+y.exr")
-        if not img and matcap_path and os.path.exists(matcap_path):
-            img = bpy.data.images.load(matcap_path)
-            print(f"Wireframe: Loaded MatCap from {matcap_path}")
-
-        if not img:
-            print(f"Wireframe: MatCap not found, using fallback shader")
-            # Fallback: simulate with nodes
-            geometry = nodes.new("ShaderNodeNewGeometry")
-            geometry.location = (-600, 100)
-            vector_transform = nodes.new("ShaderNodeVectorTransform")
-            vector_transform.vector_type = 'NORMAL'
-            vector_transform.convert_from = 'WORLD'
-            vector_transform.convert_to = 'CAMERA'
-            vector_transform.location = (-400, 100)
-            vector_add = nodes.new("ShaderNodeVectorMath")
-            vector_add.operation = 'ADD'
-            vector_add.inputs[1].default_value = (1.0, 1.0, 1.0)
-            vector_add.location = (-200, 100)
-            vector_scale = nodes.new("ShaderNodeVectorMath")
-            vector_scale.operation = 'SCALE'
-            vector_scale.inputs['Scale'].default_value = 0.5
-            vector_scale.location = (0, 100)
-            matcap_emission = nodes.new("ShaderNodeEmission")
-            matcap_emission.location = (200, 100)
-            links.new(geometry.outputs["Normal"], vector_transform.inputs["Vector"])
-            links.new(vector_transform.outputs["Vector"], vector_add.inputs[0])
-            links.new(vector_add.outputs["Vector"], vector_scale.inputs[0])
-            links.new(vector_scale.outputs["Vector"], matcap_emission.inputs["Color"])
-
-        if img:
-            # Texture coordinate: camera-space normal mapped to UV
-            tex_coord = nodes.new("ShaderNodeTexCoord")
-            tex_coord.location = (-600, 100)
-
-            # Get camera-space normal
-            geometry = nodes.new("ShaderNodeNewGeometry")
-            geometry.location = (-600, -50)
-
-            vector_transform = nodes.new("ShaderNodeVectorTransform")
-            vector_transform.vector_type = 'NORMAL'
-            vector_transform.convert_from = 'WORLD'
-            vector_transform.convert_to = 'CAMERA'
-            vector_transform.location = (-400, -50)
-
-            # Map normal XY to UV: (N.xy + 1) / 2
-            separate_xyz = nodes.new("ShaderNodeSeparateXYZ")
-            separate_xyz.location = (-200, -50)
-
-            # X mapping
-            math_add_x = nodes.new("ShaderNodeMath")
-            math_add_x.operation = 'ADD'
-            math_add_x.inputs[1].default_value = 1.0
-            math_add_x.location = (0, 50)
-
-            math_scale_x = nodes.new("ShaderNodeMath")
-            math_scale_x.operation = 'MULTIPLY'
-            math_scale_x.inputs[1].default_value = 0.5
-            math_scale_x.location = (150, 50)
-
-            # Y mapping
-            math_add_y = nodes.new("ShaderNodeMath")
-            math_add_y.operation = 'ADD'
-            math_add_y.inputs[1].default_value = 1.0
-            math_add_y.location = (0, -50)
-
-            math_scale_y = nodes.new("ShaderNodeMath")
-            math_scale_y.operation = 'MULTIPLY'
-            math_scale_y.inputs[1].default_value = 0.5
-            math_scale_y.location = (150, -50)
-
-            # Combine to UV
-            combine_xy = nodes.new("ShaderNodeCombineXYZ")
-            combine_xy.location = (300, 0)
-
-            # Image texture node
-            img_tex = nodes.new("ShaderNodeTexImage")
-            img_tex.image = img
-            img_tex.location = (450, 100)
-
-            # Emission shader
-            matcap_emission = nodes.new("ShaderNodeEmission")
-            matcap_emission.location = (650, 100)
-
-            # Connect MatCap chain
-            links.new(geometry.outputs["Normal"], vector_transform.inputs["Vector"])
-            links.new(vector_transform.outputs["Vector"], separate_xyz.inputs["Vector"])
-            links.new(separate_xyz.outputs["X"], math_add_x.inputs[0])
-            links.new(math_add_x.outputs["Value"], math_scale_x.inputs[0])
-            links.new(separate_xyz.outputs["Y"], math_add_y.inputs[0])
-            links.new(math_add_y.outputs["Value"], math_scale_y.inputs[0])
-            links.new(math_scale_x.outputs["Value"], combine_xy.inputs["X"])
-            links.new(math_scale_y.outputs["Value"], combine_xy.inputs["Y"])
-            links.new(combine_xy.outputs["Vector"], img_tex.inputs["Vector"])
-            links.new(img_tex.outputs["Color"], matcap_emission.inputs["Color"])
+    if img:
+        matcap_emission = _build_matcap_emission_nodes(nodes, links, img)
     else:
-        # Simple gray emission (like basic_1.exr)
+        # Fallback: flat gray emission
         matcap_emission = nodes.new("ShaderNodeEmission")
         matcap_emission.inputs["Color"].default_value = (0.82, 0.82, 0.82, 1.0)
         matcap_emission.location = (200, 100)
@@ -474,14 +448,14 @@ def main() -> None:
             scene.eevee.taa_render_samples = samples
 
     if wireframe_mode == "clay":
-        # EEVEE: gray MatCap simulation + black wireframe
+        # EEVEE: basic_1.exr MatCap + black wireframe
         apply_flat_shading()
-        material = create_matcap_wireframe_material(wire_size, use_normal_matcap=False)
+        material = create_matcap_wireframe_material(wire_size, matcap_name="basic_1.exr")
         apply_material_to_meshes(material)
     elif wireframe_mode == "normal":
-        # EEVEE: camera-space normal colors + black wireframe
+        # EEVEE: check_normal+y.exr MatCap + black wireframe
         apply_flat_shading()
-        material = create_matcap_wireframe_material(wire_size, use_normal_matcap=True)
+        material = create_matcap_wireframe_material(wire_size, matcap_name="check_normal+y.exr")
         apply_material_to_meshes(material)
     elif wireframe_mode == "face_normal":
         # EEVEE: world-space normal colors + black wireframe
