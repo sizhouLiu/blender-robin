@@ -79,6 +79,7 @@ DEFAULT_CONFIG = {
     "hdri_path": "",
     "env_texture": "",
     "export_metadata": False,
+    "wireframe_mode": "clay",
 }
 
 
@@ -212,6 +213,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     hdri_path = cfg.get("hdri_path", "")
     env_texture = cfg.get("env_texture", "")
     export_metadata = cfg.get("export_metadata", False)
+    wireframe_mode = cfg.get("wireframe_mode", "clay")
 
     args = [
         "--blender", str(blender_path),
@@ -237,6 +239,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args.append("--export-metadata")
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
+    if command == "wireframe":
+        args += ["--mode", wireframe_mode]
     try:
         cli(args, standalone_mode=False)
     except SystemExit:
@@ -257,6 +261,7 @@ def edit_config(cfg):
             (f"删除非特写图: {'是' if cfg.get('delete_views', False) else '否'}", "delete_views"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
+            (f"线框模式: {cfg.get('wireframe_mode', 'clay')}", "wireframe_mode"),
             (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
             (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
@@ -331,6 +336,19 @@ def edit_config(cfg):
             new = "checker" if cur == "color_grid" else "color_grid"
             cfg["uv_style"] = new
             print(f"\n  {GREEN}已切换为: {new}{RESET}\n")
+
+        elif key == "wireframe_mode":
+            modes = ["clay", "normal", "face_normal", "material"]
+            descs = {
+                "clay":        "灰模 MatCap + 线框 (basic_1.exr)",
+                "normal":      "法线 MatCap + 线框 (check_normal+y.exr)",
+                "face_normal": "面法线彩色 + 线框 (EEVEE)",
+                "material":    "白模 + 着色器线框 (EEVEE)",
+            }
+            cur = cfg.get("wireframe_mode", "clay")
+            new = modes[(modes.index(cur) + 1) % len(modes)] if cur in modes else "clay"
+            cfg["wireframe_mode"] = new
+            print(f"\n  {GREEN}已切换为: {new} ({descs[new]}){RESET}\n")
 
         elif key == "output_format":
             formats = ["PNG", "JPEG", "WEBP", "EXR", "TIFF", "BMP"]

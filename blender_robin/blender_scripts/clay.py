@@ -18,7 +18,7 @@ def import_glb(filepath):
     print(f"Clay: imported {filepath}")
 
 
-def setup_workbench_matcap(scene, matcap_name="clay_brown.exr"):
+def setup_workbench_matcap(scene, matcap_name="basic_1.exr"):
     """Configure Workbench render engine with Solid MatCap shading."""
     import bpy
 

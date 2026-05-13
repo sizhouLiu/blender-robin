@@ -74,17 +74,105 @@ def apply_material_to_meshes(material):
     return applied
 
 
-def setup_workbench_wireframe(opts):
-    """Configure Workbench engine with white model + wireframe overlay."""
+def apply_flat_shading():
+    """Apply flat shading to all mesh objects."""
+    import bpy
+
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH':
+            for poly in obj.data.polygons:
+                poly.use_smooth = False
+            obj.data.update()
+
+    print("Wireframe: applied flat shading")
+
+
+def create_face_normal_wireframe_material(wire_size=1.5):
+    """Create material that colors faces by world-space normal + black wireframe overlay."""
+    import bpy
+
+    mat = bpy.data.materials.new(name="FaceNormal_Wireframe")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    # Output node
+    output = nodes.new("ShaderNodeOutputMaterial")
+    output.location = (800, 0)
+
+    # Geometry node to get world-space normal
+    geometry = nodes.new("ShaderNodeNewGeometry")
+    geometry.location = (-400, 100)
+
+    # Vector Math nodes to remap normal from [-1,1] to [0,1] for RGB
+    # Formula: RGB = (Normal + 1) / 2
+    vector_add = nodes.new("ShaderNodeVectorMath")
+    vector_add.operation = 'ADD'
+    vector_add.inputs[1].default_value = (1.0, 1.0, 1.0)
+    vector_add.location = (-200, 100)
+
+    vector_scale = nodes.new("ShaderNodeVectorMath")
+    vector_scale.operation = 'SCALE'
+    vector_scale.inputs['Scale'].default_value = 0.5
+    vector_scale.location = (0, 100)
+
+    # Emission shader for face normal color (unaffected by lighting)
+    normal_emission = nodes.new("ShaderNodeEmission")
+    normal_emission.location = (200, 100)
+
+    # Black emission for wireframe
+    wire_emission = nodes.new("ShaderNodeEmission")
+    wire_emission.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+    wire_emission.location = (200, -100)
+
+    # Wireframe node
+    wireframe = nodes.new("ShaderNodeWireframe")
+    wireframe.inputs["Size"].default_value = wire_size
+    wireframe.use_pixel_size = True
+    wireframe.location = (0, -200)
+
+    # Mix shader
+    mix = nodes.new("ShaderNodeMixShader")
+    mix.location = (500, 0)
+
+    # Connect nodes
+    links.new(geometry.outputs["Normal"], vector_add.inputs[0])
+    links.new(vector_add.outputs["Vector"], vector_scale.inputs[0])
+    links.new(vector_scale.outputs["Vector"], normal_emission.inputs["Color"])
+
+    links.new(wireframe.outputs["Fac"], mix.inputs["Fac"])
+    links.new(normal_emission.outputs["Emission"], mix.inputs[1])
+    links.new(wire_emission.outputs["Emission"], mix.inputs[2])
+    links.new(mix.outputs["Shader"], output.inputs["Surface"])
+
+    return mat
+
+
+def setup_workbench_wireframe(opts, matcap_name=None):
+    """Configure Workbench engine with model + wireframe overlay."""
     import bpy
 
     scene = bpy.context.scene
     scene.render.engine = 'BLENDER_WORKBENCH'
 
     shading = scene.display.shading
-    shading.light = 'STUDIO'
-    shading.color_type = 'SINGLE'
-    shading.single_color = (0.9, 0.9, 0.9)
+
+    if matcap_name:
+        # Use MatCap shading (for clay/normal modes)
+        shading.light = 'MATCAP'
+        shading.color_type = 'MATERIAL'
+        try:
+            shading.studio_light = matcap_name
+            print(f"Wireframe: Using MatCap {matcap_name}")
+        except Exception:
+            print(f"Wireframe: MatCap '{matcap_name}' not found, using default")
+    else:
+        # Use solid color shading (for basic wireframe)
+        shading.light = 'STUDIO'
+        shading.color_type = 'SINGLE'
+        shading.single_color = (0.9, 0.9, 0.9)
+
     shading.show_xray_wireframe = True
     shading.xray_alpha_wireframe = 0.0
 
@@ -220,12 +308,16 @@ def main() -> None:
     render.film_transparent = True
 
     wireframe_mode = opts.get("wireframe_mode", "material")
+    wire_size = opts.get("wire_size", 1.5)
 
-    if wireframe_mode == "workbench":
-        # Workbench engine: white model + wireframe overlay
-        setup_workbench_wireframe(opts)
-    else:
-        # Material mode: shader-based wireframe on white clay
+    if wireframe_mode == "clay":
+        # Workbench: basic_1.exr MatCap + wireframe overlay
+        setup_workbench_wireframe(opts, matcap_name="basic_1.exr")
+    elif wireframe_mode == "normal":
+        # Workbench: check_normal+y.exr MatCap + wireframe overlay
+        setup_workbench_wireframe(opts, matcap_name="check_normal+y.exr")
+    elif wireframe_mode == "face_normal":
+        # EEVEE: flat-shaded face normal colors + black wireframe overlay
         engine = config.get("engine", "BLENDER_EEVEE_NEXT")
         render.engine = resolve_engine(engine)
 
@@ -234,11 +326,32 @@ def main() -> None:
             if samples is not None:
                 scene.eevee.taa_render_samples = samples
 
-        wire_size = opts.get("wire_size", 1.5)
+        apply_flat_shading()
+        material = create_face_normal_wireframe_material(wire_size)
+        apply_material_to_meshes(material)
+
+        world = scene.world
+        if not world:
+            world = bpy.data.worlds.new("Wire_World")
+            scene.world = world
+        world.use_nodes = True
+        bg = world.node_tree.nodes.get("Background")
+        if bg:
+            bg.inputs["Color"].default_value = (0.85, 0.85, 0.85, 1.0)
+            bg.inputs["Strength"].default_value = 1.0
+    else:
+        # Material mode (default): shader-based wireframe on white clay
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = resolve_engine(engine)
+
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
+
         material = create_wireframe_material(wire_size)
         apply_material_to_meshes(material)
 
-        # Gray background
         world = scene.world
         if not world:
             world = bpy.data.worlds.new("Wire_World")

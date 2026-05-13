@@ -70,71 +70,42 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     return camera
 
 
-def setup_albedo_material_override():
-    """
-    Override all materials to output only the Base Color (albedo) without lighting.
-    Works by replacing each material's node tree with a simple Emission node
-    driven by the original Base Color, so the output is flat/unlit color.
-    Preserves per-material Base Color textures.
-    """
+def setup_albedo_compositor(output_dir, base_name):
+    """Enable DiffCol pass and output albedo via compositor."""
     import bpy
 
-    modified = 0
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        for slot in obj.material_slots:
-            mat = slot.material
-            if mat is None:
-                continue
-            mat.use_nodes = True
-            nodes = mat.node_tree.nodes
-            links = mat.node_tree.links
+    scene = bpy.context.scene
+    scene.render.use_compositing = True
+    bpy.context.view_layer.use_pass_diffuse_color = True
 
-            # Find existing Principled BSDF to extract Base Color
-            principled = None
-            for node in nodes:
-                if node.type == 'BSDF_PRINCIPLED':
-                    principled = node
-                    break
+    # Blender 5.x: use compositing_node_group; Blender 4.x: use node_tree
+    if hasattr(scene, 'compositing_node_group'):
+        tree = scene.com
+        positing_node_group
+        if tree is None:
+            tree = bpy.data.node_groups.new("Albedo_Compositor", 'CompositorNodeTree')
+            scene.compositing_node_group = tree
+    else:
+        scene.use_nodes = True
+        tree = scene.node_tree
+    tree.nodes.clear()
 
-            # Get output node
-            output = None
-            for node in nodes:
-                if node.type == 'OUTPUT_MATERIAL':
-                    output = node
-                    break
-            if output is None:
-                output = nodes.new("ShaderNodeOutputMaterial")
-                output.location = (600, 0)
+    rl = tree.nodes.new("CompositorNodeRLayers")
+    rl.location = (0, 0)
 
-            # Create emission node for flat (unlit) color output
-            emit = nodes.new("ShaderNodeEmission")
-            emit.location = (400, 0)
-            emit.inputs["Strength"].default_value = 1.0
+    # Combine DiffCol with original alpha
+    alpha_node = tree.nodes.new("CompositorNodeSetAlpha")
+    alpha_node.location = (300, 0)
+    diffcol_output = rl.outputs.get("Diffuse Color") or rl.outputs.get("DiffCol")
+    tree.links.new(diffcol_output, alpha_node.inputs["Image"])
+    tree.links.new(rl.outputs["Alpha"], alpha_node.inputs["Alpha"])
 
-            if principled is not None:
-                # Connect Base Color from Principled to Emission Color
-                base_color_socket = principled.inputs.get("Base Color")
-                if base_color_socket and base_color_socket.links:
-                    # There's a texture connected — rewire it to Emission
-                    tex_link = base_color_socket.links[0]
-                    tex_node = tex_link.from_node
-                    tex_out = tex_link.from_socket
-                    links.new(tex_out, emit.inputs["Color"])
-                else:
-                    # Plain color value
-                    color = base_color_socket.default_value if base_color_socket else (0.8, 0.8, 0.8, 1.0)
-                    emit.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
-            else:
-                # No Principled BSDF — use default gray
-                emit.inputs["Color"].default_value = (0.8, 0.8, 0.8, 1.0)
+    # Use Composite node — outputs to render.filepath set by render_multi_view
+    composite = tree.nodes.new("CompositorNodeComposite")
+    composite.location = (600, 0)
+    tree.links.new(alpha_node.outputs["Image"], composite.inputs["Image"])
 
-            # Wire Emission to output Surface
-            links.new(emit.outputs["Emission"], output.inputs["Surface"])
-            modified += 1
-
-    print(f"Albedo: applied albedo material override to {modified} material slot(s)")
+    print("Albedo: compositor set up for DiffCol pass")
 
 
 def resolve_engine(name):
@@ -215,7 +186,8 @@ def main() -> None:
             bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
             bg.inputs["Strength"].default_value = 1.0
 
-    mesh_objects = rv._get_model_mesh_objects(bpy)
+    mesh_objects = rv._get_model_
+    mesh_objects(bpy)
     if not mesh_objects:
         print("Albedo: no mesh objects found")
         return
@@ -223,10 +195,9 @@ def main() -> None:
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
     setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
-    setup_albedo_material_override()
-
     output_dir = config.get("output_dir", "./output")
     base_name = config.get("filename_pattern", "albedo")
+    setup_albedo_compositor(output_dir, base_name)
 
     rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Albedo")
 

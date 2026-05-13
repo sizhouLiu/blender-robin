@@ -18,5 +18,6 @@
   "uv_style": "color_grid",
   "delete_views": true,
   "export_metadata": false,
-  "output_format": "PNG"
+  "output_format": "PNG",
+  "wireframe_mode": "face_normal"
 }

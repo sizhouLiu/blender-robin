@@ -338,16 +338,32 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 @click.option("--output", "-o", type=click.Path(), default="./wireframe_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @click.option("--wire-size", type=float, default=1.5, help="Wireframe line thickness in pixels.")
+@click.option("--mode", "wireframe_mode",
+              type=click.Choice(["material", "clay", "normal", "face_normal"], case_sensitive=False),
+              default="clay",
+              help="Wireframe mode: 'material' = EEVEE shader; 'clay' = basic_1.exr MatCap + wireframe; 'normal' = check_normal+y.exr MatCap + wireframe; 'face_normal' = flat-shaded face normal colors + wireframe.")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-              wire_size: float, views: str | None, closeup_count: int, no_composite: bool,
-              delete_views: bool, hdri: str | None, env_texture: str | None, export_metadata: bool,
-              output_format: str, pattern: str, parallel: int, dry_run: bool) -> None:
-    """Render wireframe-on-white for all GLB/GLTF files."""
+              wire_size: float, wireframe_mode: str, views: str | None, closeup_count: int,
+              no_composite: bool, delete_views: bool, hdri: str | None, env_texture: str | None,
+              export_metadata: bool, output_format: str, pattern: str, parallel: int,
+              dry_run: bool) -> None:
+    """Render wireframe-on-white for all GLB/GLTF files.
+
+    Four modes available:
+
+      material   - White clay model with black wireframe lines (shader-based, EEVEE)
+
+      clay       - Workbench engine with basic_1.exr MatCap + wireframe overlay
+
+      normal     - Workbench engine with check_normal+y.exr MatCap + wireframe overlay
+
+      face_normal - Flat-shaded face normal colors (RGB from world-space normals) + black wireframe (EEVEE)
+    """
     output_dir = Path(output)
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
@@ -374,6 +390,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
                 wire_size=wire_size,
+                wireframe_mode=wireframe_mode.lower(),
             ),
         )
         configs.append(cfg)
@@ -405,13 +422,14 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.argument("directory", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="./clay_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
+@click.option("--matcap", type=str, default="clay_brown.exr", help="MatCap file name (e.g., clay_brown.exr, basic_1.exr).")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-         views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
+         matcap: str, views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
          hdri: str | None, env_texture: str | None, export_metadata: bool, output_format: str,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
@@ -440,6 +458,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata,
+                matcap=matcap,
             ),
         )
         configs.append(cfg)
@@ -855,3 +874,56 @@ def config_show(blender: str | None) -> None:
     click.echo(f"Default device: {defaults.device}")
     click.echo(f"Default resolution: {defaults.resolution_x}x{defaults.resolution_y}")
     click.echo(f"Default format: {defaults.output_format}")
+
+
+@config_group.command("list-matcaps")
+@click.option("--blender", envvar="BLENDER_PATH", type=click.Path(), default=None)
+def config_list_matcaps(blender: str | None) -> None:
+    """List available MatCap files in Blender."""
+    import subprocess
+    import tempfile
+
+    if blender:
+        blender_path = Path(blender)
+    else:
+        try:
+            blender_path = discover_blender()
+        except BlenderNotFoundError as e:
+            raise click.ClickException(str(e))
+
+    script = """
+import bpy, os
+blender_dir = os.path.dirname(bpy.app.binary_path)
+for root, dirs, files in os.walk(blender_dir):
+    if 'matcap' in root.lower():
+        for f in files:
+            print(f)
+bpy.ops.wm.quit_blender()
+"""
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as f:
+        f.write(script)
+        script_path = f.name
+
+    try:
+        result = subprocess.run(
+            [str(blender_path), "--background", "--python", script_path],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace'
+        )
+
+        if result.returncode != 0:
+            raise click.ClickException(f"Blender exited with code {result.returncode}")
+
+        lines = [line for line in result.stdout.split('\n') if line.strip() and not line.startswith('Blender')]
+
+        if lines:
+            click.echo("Available MatCap files:")
+            for line in lines:
+                click.echo(f"  {line}")
+        else:
+            click.echo("No MatCap files found.")
+    finally:
+        Path(script_path).unlink(missing_ok=True)
