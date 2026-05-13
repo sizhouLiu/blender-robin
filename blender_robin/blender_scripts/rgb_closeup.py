@@ -123,27 +123,6 @@ def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
     print(f"RGB Closeup: part closeup, bbox size {bbox_size.length:.2f}, distance {distance:.2f}")
 
 
-def resolve_engine(name):
-    import bpy
-
-    available = set()
-    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
-        available.add(engine.identifier)
-
-    if name in available:
-        return name
-
-    aliases = {
-        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
-        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
-    }
-    alt = aliases.get(name)
-    if alt and alt in available:
-        return alt
-
-    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
-
-
 def main() -> None:
     import bpy
 
@@ -170,7 +149,7 @@ def main() -> None:
     render = scene.render
 
     engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
+    render.engine = rv.resolve_engine(engine)
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)

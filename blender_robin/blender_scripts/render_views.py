@@ -198,6 +198,58 @@ def get_bounding_box_evaluated(bpy, mesh_objects):
 
 # ── Camera helpers ────────────────────────────────────────────────────────
 
+def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
+    """Standard camera setup: frames bbox from diagonal direction (1, -1, 0.6)."""
+    import bpy
+    import math
+    import mathutils
+
+    camera = scene.camera
+    if not camera:
+        cam_data = bpy.data.cameras.new("Camera")
+        camera = bpy.data.objects.new("Camera", cam_data)
+        scene.collection.objects.link(camera)
+        scene.camera = camera
+
+    cam_data = camera.data
+    cam_data.clip_start = 0.01
+    cam_data.clip_end = 100000
+
+    aspect = resolution_x / resolution_y
+    fov = cam_data.angle
+
+    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+
+    cam_forward = -direction
+    world_up = mathutils.Vector((0, 0, 1))
+    cam_right = cam_forward.cross(world_up).normalized()
+    cam_up = cam_right.cross(cam_forward).normalized()
+
+    hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
+    corners = [
+        mathutils.Vector((sx * hx, sy * hy, sz * hz))
+        for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
+    ]
+
+    max_right = max(abs(c.dot(cam_right)) for c in corners)
+    max_up = max(abs(c.dot(cam_up)) for c in corners)
+
+    dist_h = max_right / math.tan(fov / 2)
+    vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
+    dist_v = max_up / math.tan(vfov / 2)
+
+    distance = max(dist_h, dist_v) * 1.02
+
+    camera.location = center + direction * distance
+
+    look_dir = center - camera.location
+    rot_quat = look_dir.to_track_quat('-Z', 'Y')
+    camera.rotation_euler = rot_quat.to_euler()
+
+    cam_data.clip_end = max(cam_data.clip_end, distance * 3)
+    return camera
+
+
 def get_camera_positions_on_sphere(center, radius, elevation_deg=10):
     """Return 4 camera positions at fixed azimuths (45/135/225/315°) on a sphere."""
     import mathutils
@@ -517,3 +569,25 @@ def shade_flat():
         if obj.type == "MESH":
             for poly in obj.data.polygons:
                 poly.use_smooth = False
+
+
+def resolve_engine(name):
+    """Resolve engine name to one available in this Blender version."""
+    import bpy
+
+    available = set()
+    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
+        available.add(engine.identifier)
+
+    if name in available:
+        return name
+
+    aliases = {
+        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
+        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
+    }
+    alt = aliases.get(name)
+    if alt and alt in available:
+        return alt
+
+    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]

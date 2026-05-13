@@ -218,113 +218,6 @@ def apply_material_to_meshes(material):
     return applied
 
 
-def setup_camera_and_lighting():
-    import bpy
-    import math
-    import mathutils
-
-    scene = bpy.context.scene
-
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
-    if not mesh_objects:
-        return
-
-    # Collect ALL vertices in world space for precise bounding box
-    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
-    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
-
-    for obj in mesh_objects:
-        for corner in obj.bound_box:
-            world_corner = obj.matrix_world @ mathutils.Vector(corner)
-            min_co.x = min(min_co.x, world_corner.x)
-            min_co.y = min(min_co.y, world_corner.y)
-            min_co.z = min(min_co.z, world_corner.z)
-            max_co.x = max(max_co.x, world_corner.x)
-            max_co.y = max(max_co.y, world_corner.y)
-            max_co.z = max(max_co.z, world_corner.z)
-
-    center = (min_co + max_co) / 2
-    bbox_size = max_co - min_co
-
-    camera = scene.camera
-    if not camera:
-        cam_data = bpy.data.cameras.new("UV_Check_Camera")
-        camera = bpy.data.objects.new("UV_Check_Camera", cam_data)
-        scene.collection.objects.link(camera)
-        scene.camera = camera
-
-    cam_data = camera.data
-    cam_data.clip_start = 0.01
-    cam_data.clip_end = 10000
-
-    aspect = scene.render.resolution_x / scene.render.resolution_y
-    fov = cam_data.angle
-
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
-
-    cam_forward = -direction
-    world_up = mathutils.Vector((0, 0, 1))
-    cam_right = cam_forward.cross(world_up).normalized()
-    cam_up = cam_right.cross(cam_forward).normalized()
-
-    hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
-    corners = [
-        mathutils.Vector((sx * hx, sy * hy, sz * hz))
-        for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
-    ]
-
-    max_right = max(abs(c.dot(cam_right)) for c in corners)
-    max_up = max(abs(c.dot(cam_up)) for c in corners)
-
-    dist_h = max_right / math.tan(fov / 2)
-    vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
-    dist_v = max_up / math.tan(vfov / 2)
-
-    distance = max(dist_h, dist_v) * 1.02
-
-    camera.location = center + direction * distance
-
-    look_dir = center - camera.location
-    rot_quat = look_dir.to_track_quat('-Z', 'Y')
-    camera.rotation_euler = rot_quat.to_euler()
-
-    cam_data.clip_end = max(cam_data.clip_end, distance * 3)
-
-    print(f"UV Checker: camera at distance {distance:.2f}, bbox size {bbox_size.length:.2f}")
-
-    # Add lighting
-    has_light = any(obj.type == "LIGHT" for obj in scene.objects)
-    if not has_light:
-        light_data = bpy.data.lights.new(name="UV_Check_Sun", type="SUN")
-        light_data.energy = 3.0
-        light_obj = bpy.data.objects.new("UV_Check_Sun", light_data)
-        light_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
-        scene.collection.objects.link(light_obj)
-
-
-def resolve_engine(name):
-    """Resolve engine name to one available in this Blender version."""
-    import bpy
-
-    available = set()
-    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
-        available.add(engine.identifier)
-
-    if name in available:
-        return name
-
-    # Blender 5.x renamed BLENDER_EEVEE_NEXT -> BLENDER_EEVEE
-    aliases = {
-        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
-        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
-    }
-    alt = aliases.get(name)
-    if alt and alt in available:
-        return alt
-
-    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
-
-
 def main() -> None:
     import bpy
 
@@ -358,13 +251,11 @@ def main() -> None:
     if count == 0:
         print("UV Checker: no meshes with UVs found, rendering scene as-is")
 
-    setup_camera_and_lighting()
-
     scene = bpy.context.scene
     render = scene.render
 
     engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
+    render.engine = rv.resolve_engine(engine)
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)
@@ -373,10 +264,6 @@ def main() -> None:
     render.image_settings.file_format = fmt
     render.image_settings.color_mode = 'RGBA'
     render.film_transparent = True
-
-    output_dir = config.get("output_dir", "./uv_check_output")
-    filename_pattern = config.get("filename_pattern", "uv_check")
-    render.filepath = f"{output_dir}/{filename_pattern}"
 
     if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
         samples = config.get("samples")
@@ -394,61 +281,16 @@ def main() -> None:
         bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
         bg.inputs["Strength"].default_value = 1.0
 
-    mesh_objects = [obj for obj in scene.objects if obj.type == "MESH"]
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("UV Checker: no mesh objects found")
         return
 
-    min_co = __import__('mathutils').Vector((float('inf'), float('inf'), float('inf')))
-    max_co = __import__('mathutils').Vector((float('-inf'), float('-inf'), float('-inf')))
-    for obj in mesh_objects:
-        for corner in obj.bound_box:
-            wc = obj.matrix_world @ __import__('mathutils').Vector(corner)
-            min_co.x = min(min_co.x, wc.x)
-            min_co.y = min(min_co.y, wc.y)
-            min_co.z = min(min_co.z, wc.z)
-            max_co.x = max(max_co.x, wc.x)
-            max_co.y = max(max_co.y, wc.y)
-            max_co.z = max(max_co.z, wc.z)
-    center = (min_co + max_co) / 2
-    bbox_size = max_co - min_co
+    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+    ensure_lighting(scene)
 
-    setup_camera_and_lighting()
-
-    def _setup_uv_cam(sc, c, bs, rx, ry):
-        import math as m
-        import mathutils as mu
-        camera = sc.camera
-        if not camera:
-            cd = bpy.data.cameras.new("UV_Cam")
-            camera = bpy.data.objects.new("UV_Cam", cd)
-            sc.collection.objects.link(camera)
-            sc.camera = camera
-        cd = camera.data
-        cd.clip_start = 0.01
-        cd.clip_end = 100000
-        aspect = rx / ry
-        fov = cd.angle
-        direction = mu.Vector((1.0, -1.0, 0.6)).normalized()
-        cam_forward = -direction
-        world_up = mu.Vector((0, 0, 1))
-        cam_right = cam_forward.cross(world_up).normalized()
-        cam_up = cam_right.cross(cam_forward).normalized()
-        hx, hy, hz = bs.x / 2, bs.y / 2, bs.z / 2
-        corners = [mu.Vector((sx*hx, sy*hy, sz*hz)) for sx in (-1,1) for sy in (-1,1) for sz in (-1,1)]
-        max_right = max(abs(co.dot(cam_right)) for co in corners)
-        max_up_val = max(abs(co.dot(cam_up)) for co in corners)
-        dist_h = max_right / m.tan(fov / 2)
-        vfov = 2 * m.atan(m.tan(fov / 2) / aspect)
-        dist_v = max_up_val / m.tan(vfov / 2)
-        distance = max(dist_h, dist_v) * 1.02
-        camera.location = c + direction * distance
-        look_dir = c - camera.location
-        rot_quat = look_dir.to_track_quat('-Z', 'Y')
-        camera.rotation_euler = rot_quat.to_euler()
-        cd.clip_end = max(cd.clip_end, distance * 3)
-
-    rv.render_multi_view(bpy, scene, _setup_uv_cam, center, bbox_size, opts, config, "UV Checker")
+    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
 
 
 if __name__ == "__main__":

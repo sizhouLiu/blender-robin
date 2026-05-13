@@ -20,56 +20,6 @@ def import_glb(filepath):
     print(f"Albedo: imported {filepath}")
 
 
-def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
-    import bpy
-    import mathutils
-
-    camera = scene.camera
-    if not camera:
-        cam_data = bpy.data.cameras.new("Albedo_Camera")
-        camera = bpy.data.objects.new("Albedo_Camera", cam_data)
-        scene.collection.objects.link(camera)
-        scene.camera = camera
-
-    cam_data = camera.data
-    cam_data.clip_start = 0.01
-    cam_data.clip_end = 100000
-
-    aspect = resolution_x / resolution_y
-    fov = cam_data.angle
-
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
-
-    cam_forward = -direction
-    world_up = mathutils.Vector((0, 0, 1))
-    cam_right = cam_forward.cross(world_up).normalized()
-    cam_up = cam_right.cross(cam_forward).normalized()
-
-    hx, hy, hz = bbox_size.x / 2, bbox_size.y / 2, bbox_size.z / 2
-    corners = [
-        mathutils.Vector((sx * hx, sy * hy, sz * hz))
-        for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)
-    ]
-
-    max_right = max(abs(c.dot(cam_right)) for c in corners)
-    max_up = max(abs(c.dot(cam_up)) for c in corners)
-
-    dist_h = max_right / math.tan(fov / 2)
-    vfov = 2 * math.atan(math.tan(fov / 2) / aspect)
-    dist_v = max_up / math.tan(vfov / 2)
-
-    distance = max(dist_h, dist_v) * 1.02
-
-    camera.location = center + direction * distance
-
-    look_dir = center - camera.location
-    rot_quat = look_dir.to_track_quat('-Z', 'Y')
-    camera.rotation_euler = rot_quat.to_euler()
-
-    cam_data.clip_end = max(cam_data.clip_end, distance * 3)
-    return camera
-
-
 def setup_albedo_compositor(output_dir, base_name):
     """Enable DiffCol pass and output albedo via compositor."""
     import bpy
@@ -108,27 +58,6 @@ def setup_albedo_compositor(output_dir, base_name):
     print("Albedo: compositor set up for DiffCol pass")
 
 
-def resolve_engine(name):
-    import bpy
-
-    available = set()
-    for engine in bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items:
-        available.add(engine.identifier)
-
-    if name in available:
-        return name
-
-    aliases = {
-        "BLENDER_EEVEE_NEXT": "BLENDER_EEVEE",
-        "BLENDER_EEVEE": "BLENDER_EEVEE_NEXT",
-    }
-    alt = aliases.get(name)
-    if alt and alt in available:
-        return alt
-
-    return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
-
-
 def main() -> None:
     import bpy
 
@@ -155,7 +84,7 @@ def main() -> None:
     render = scene.render
 
     engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = resolve_engine(engine)
+    render.engine = rv.resolve_engine(engine)
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
     render.resolution_percentage = config.get("resolution_percentage", 100)
@@ -186,20 +115,19 @@ def main() -> None:
             bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
             bg.inputs["Strength"].default_value = 1.0
 
-    mesh_objects = rv._get_model_
-    mesh_objects(bpy)
+    mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("Albedo: no mesh objects found")
         return
 
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
-    setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
     output_dir = config.get("output_dir", "./output")
     base_name = config.get("filename_pattern", "albedo")
     setup_albedo_compositor(output_dir, base_name)
 
-    rv.render_multi_view(bpy, scene, setup_camera, center, bbox_size, opts, config, "Albedo")
+    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Albedo")
 
 
 if __name__ == "__main__":
