@@ -18,7 +18,7 @@ def import_glb(filepath):
     print(f"Clay: imported {filepath}")
 
 
-def setup_workbench_matcap(scene, matcap_name="basic_1.exr"):
+def setup_workbench_matcap(scene, matcap_name="basic_grey.exr"):
     """Configure Workbench render engine with Solid MatCap shading."""
     import bpy
 
@@ -96,10 +96,8 @@ def main() -> None:
     render.image_settings.file_format = fmt
     render.image_settings.color_mode = 'RGB'
 
-    matcap_name = opts.get("matcap", "basic_1.exr")
+    matcap_name = opts.get("matcap", "basic_grey.exr")
     setup_workbench_matcap(scene, matcap_name)
-
-    rv.setup_white_world(scene)
 
     mat = create_simple_gray_material()
     apply_material_to_meshes(mat)

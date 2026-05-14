@@ -426,7 +426,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.argument("directory", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), default="./clay_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
-@click.option("--matcap", type=str, default="clay_brown.exr", help="MatCap file name (e.g., clay_brown.exr, basic_1.exr).")
+@click.option("--matcap", type=str, default="basic_grey.exr", help="MatCap file name (e.g., basic_grey.exr, clay_brown.exr).")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
