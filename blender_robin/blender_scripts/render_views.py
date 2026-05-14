@@ -333,6 +333,17 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     export_meta = opts.get("export_metadata", False)
     animation_frame = opts.get("animation_frame", 1)  # Default to frame 1
 
+    # Set animation frame BEFORE computing bounding box and camera
+    # This ensures the bounding box includes the animated pose (arms/legs extended, etc.)
+    scene.frame_set(animation_frame)
+    bpy.context.view_layer.update()
+
+    # Recompute bounding box at the target animation frame
+    mesh_objects = _get_model_mesh_objects(bpy)
+    if mesh_objects:
+        center, bbox_size = get_bounding_box_evaluated(bpy, mesh_objects)
+        print(f"{label}: Recomputed bbox at frame {animation_frame}")
+
     camera = scene.camera
     if not camera:
         setup_camera_func(scene, center, bbox_size, render.resolution_x, render.resolution_y)
@@ -426,7 +437,6 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
 
         filepath = f"{output_dir}/{base_name}{suffix}"
         render.filepath = filepath
-        scene.frame_set(animation_frame)
         bpy.ops.render.render(write_still=True)
         view_files.append(f"{base_name}{suffix}")
         print(f"{label}: {view_name} rendered to {filepath}")
