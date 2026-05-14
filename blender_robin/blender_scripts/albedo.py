@@ -105,15 +105,7 @@ def main() -> None:
     if hdri_path:
         rv.setup_hdri_world(hdri_path, env_texture)
     else:
-        world = scene.world
-        if not world:
-            world = bpy.data.worlds.new("Albedo_World")
-            scene.world = world
-        world.use_nodes = True
-        bg = world.node_tree.nodes.get("Background")
-        if bg:
-            bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
-            bg.inputs["Strength"].default_value = 1.0
+        rv.setup_white_world(scene)
 
     mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:

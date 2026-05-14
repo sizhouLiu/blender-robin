@@ -72,27 +72,6 @@ def frame_camera_on_bbox(camera, center, bbox_size, resolution_x, resolution_y):
     return distance
 
 
-def ensure_lighting(scene):
-    import bpy
-    import mathutils
-
-    has_light = any(obj.type == "LIGHT" for obj in scene.objects)
-    if has_light:
-        return
-
-    light_data = bpy.data.lights.new(name="RGB_Sun", type="SUN")
-    light_data.energy = 3.0
-    light_obj = bpy.data.objects.new("RGB_Sun", light_data)
-    light_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
-    scene.collection.objects.link(light_obj)
-
-    fill_data = bpy.data.lights.new(name="RGB_Fill", type="SUN")
-    fill_data.energy = 1.0
-    fill_obj = bpy.data.objects.new("RGB_Fill", fill_data)
-    fill_obj.rotation_euler = mathutils.Euler((-0.5, -0.8, -0.3))
-    scene.collection.objects.link(fill_obj)
-
-
 def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
     """Frame a specific part's bounding box, same logic as full-body but tighter."""
     import mathutils
@@ -164,15 +143,12 @@ def main() -> None:
         if samples is not None:
             scene.eevee.taa_render_samples = samples
 
-    world = scene.world
-    if not world:
-        world = bpy.data.worlds.new("RGB_World")
-        scene.world = world
-    world.use_nodes = True
-    bg = world.node_tree.nodes.get("Background")
-    if bg:
-        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
-        bg.inputs["Strength"].default_value = 1.0
+    hdri_path = opts.get("hdri_path")
+    env_texture = opts.get("env_texture")
+    if hdri_path:
+        rv.setup_hdri_world(hdri_path, env_texture)
+    else:
+        rv.setup_white_world(scene)
 
     mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
@@ -182,7 +158,6 @@ def main() -> None:
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
 
     camera = ensure_camera(scene)
-    ensure_lighting(scene)
 
     def _setup_cam(sc, c, bs, rx, ry):
         cam = ensure_camera(sc)

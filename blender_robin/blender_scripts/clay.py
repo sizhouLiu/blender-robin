@@ -99,6 +99,8 @@ def main() -> None:
     matcap_name = opts.get("matcap", "basic_1.exr")
     setup_workbench_matcap(scene, matcap_name)
 
+    rv.setup_white_world(scene)
+
     mat = create_simple_gray_material()
     apply_material_to_meshes(mat)
 

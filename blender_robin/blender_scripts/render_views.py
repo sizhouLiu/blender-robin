@@ -591,3 +591,18 @@ def resolve_engine(name):
         return alt
 
     return "BLENDER_EEVEE" if "BLENDER_EEVEE" in available else list(available)[0]
+
+
+def setup_white_world(scene, strength=1.0):
+    """Set world background to pure white with given strength."""
+    import bpy
+
+    world = scene.world
+    if not world:
+        world = bpy.data.worlds.new("World")
+        scene.world = world
+    world.use_nodes = True
+    bg = world.node_tree.nodes.get("Background")
+    if bg:
+        bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+        bg.inputs["Strength"].default_value = strength

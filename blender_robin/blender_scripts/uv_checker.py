@@ -90,21 +90,6 @@ def apply_material_to_meshes(material):
     return applied
 
 
-def ensure_lighting(scene):
-    import bpy
-    import mathutils
-
-    has_light = any(obj.type == "LIGHT" for obj in scene.objects)
-    if has_light:
-        return
-
-    light_data = bpy.data.lights.new(name="UV_Check_Sun", type="SUN")
-    light_data.energy = 3.0
-    light_obj = bpy.data.objects.new("UV_Check_Sun", light_data)
-    light_obj.rotation_euler = mathutils.Euler((0.8, 0.2, 0.5))
-    scene.collection.objects.link(light_obj)
-
-
 def main() -> None:
     import bpy
 
@@ -112,6 +97,12 @@ def main() -> None:
     config_json = sys.argv[separator_idx + 1]
     config = json.loads(config_json)
     opts = config.get("script_options", {})
+
+    import importlib.util, os
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
 
     style = opts.get("style", "color_grid")
     scale = opts.get("scale", 8.0)
@@ -128,6 +119,8 @@ def main() -> None:
     scene = bpy.context.scene
     render = scene.render
 
+    rv.setup_white_world(scene)
+
     render.engine = config.get("engine", "BLENDER_EEVEE_NEXT")
     render.resolution_x = config.get("resolution_x", 1920)
     render.resolution_y = config.get("resolution_y", 1080)
@@ -142,8 +135,6 @@ def main() -> None:
 
     if render.engine == "BLENDER_EEVEE_NEXT":
         scene.eevee.taa_render_samples = config.get("samples", 32)
-
-    ensure_lighting(scene)
 
     scene.frame_set(1)
     bpy.ops.render.render(write_still=True)

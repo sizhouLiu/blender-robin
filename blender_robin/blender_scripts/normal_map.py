@@ -95,6 +95,8 @@ def main() -> None:
 
     setup_workbench_normal(opts)
 
+    rv.setup_white_world(scene)
+
     mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
         print("NormalMap: no mesh objects found")

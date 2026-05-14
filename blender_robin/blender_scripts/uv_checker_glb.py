@@ -270,16 +270,8 @@ def main() -> None:
         if samples is not None:
             scene.eevee.taa_render_samples = samples
 
-    # Set a white world background for better visibility
-    world = scene.world
-    if not world:
-        world = bpy.data.worlds.new("UV_Check_World")
-        scene.world = world
-    world.use_nodes = True
-    bg = world.node_tree.nodes.get("Background")
-    if bg:
-        bg.inputs["Color"].default_value = (0.2, 0.2, 0.2, 1.0)
-        bg.inputs["Strength"].default_value = 1.0
+    # Set world background
+    rv.setup_white_world(scene)
 
     mesh_objects = rv._get_model_mesh_objects(bpy)
     if not mesh_objects:
@@ -288,7 +280,6 @@ def main() -> None:
 
     center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
     rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
-    ensure_lighting(scene)
 
     rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
 
