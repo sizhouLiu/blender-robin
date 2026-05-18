@@ -74,6 +74,7 @@ DEFAULT_CONFIG = {
     "closeup_count": 1,
     "composite": True,
     "delete_views": False,
+    "delete_closeups": False,
     "uv_style": "color_grid",
     "output_format": "PNG",
     "hdri_path": "",
@@ -81,6 +82,7 @@ DEFAULT_CONFIG = {
     "export_metadata": False,
     "wireframe_mode": "clay",
     "animation_frame": None,
+    "camera_json": "",
 }
 
 
@@ -194,11 +196,12 @@ def input_path(prompt):
             continue
         glb_count = len(list(p.glob("*.glb")))
         gltf_count = len(list(p.glob("*.gltf")))
-        total = glb_count + gltf_count
+        blend_count = len(list(p.glob("*.blend")))
+        total = glb_count + gltf_count + blend_count
         if total == 0:
-            print(f"  {YELLOW}该文件夹下没有找到 .glb/.gltf 文件{RESET}")
+            print(f"  {YELLOW}该文件夹下没有找到 .glb/.gltf/.blend 文件{RESET}")
             continue
-        print(f"  {GREEN}找到 {total} 个模型文件{RESET}")
+        print(f"  {GREEN}找到 {total} 个模型文件 (glb:{glb_count} gltf:{gltf_count} blend:{blend_count}){RESET}")
         return p
 
 
@@ -209,6 +212,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     closeup_count = cfg.get("closeup_count", 1)
     composite = cfg.get("composite", True)
     delete_views = cfg.get("delete_views", False)
+    delete_closeups = cfg.get("delete_closeups", False)
     parallel = cfg.get("parallel", 1)
     output_format = cfg.get("output_format", "PNG")
     hdri_path = cfg.get("hdri_path", "")
@@ -216,6 +220,13 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     export_metadata = cfg.get("export_metadata", False)
     wireframe_mode = cfg.get("wireframe_mode", "clay")
     animation_frame = cfg.get("animation_frame", None)
+    camera_json = cfg.get("camera_json", "")
+
+    # Always pass all supported model types; CLI handles comma-separated patterns
+    pattern = "*.glb,*.gltf,*.blend"
+    glb_count = len(list(directory.glob("*.glb"))) + len(list(directory.glob("*.gltf")))
+    blend_count = len(list(directory.glob("*.blend")))
+    print(f"  {DIM}检测到: {glb_count} 个 GLB/GLTF, {blend_count} 个 BLEND → 使用模式: {pattern}{RESET}")
 
     args = [
         "--blender", str(blender_path),
@@ -226,6 +237,7 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         "--closeup-count", str(closeup_count),
         "-j", str(parallel),
         "--format", output_format,
+        "--pattern", pattern,
     ]
     if views:
         args += ["--views", ",".join(views)]
@@ -233,6 +245,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args.append("--no-composite")
     if delete_views:
         args.append("--delete-views")
+    if delete_closeups:
+        args.append("--delete-closeups")
     if hdri_path:
         args += ["--hdri", hdri_path]
     if env_texture:
@@ -241,6 +255,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args.append("--export-metadata")
     if animation_frame is not None:
         args += ["--animation-frame", str(animation_frame)]
+    if camera_json:
+        args += ["--camera-json", camera_json]
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
     if command == "wireframe":
@@ -264,6 +280,7 @@ def edit_config(cfg):
             (f"动画帧: {cfg.get('animation_frame', '(默认第1帧)')}", "animation_frame"),
             (f"拼合大图: {'是' if cfg.get('composite', True) else '否'}", "composite"),
             (f"删除非特写图: {'是' if cfg.get('delete_views', False) else '否'}", "delete_views"),
+            (f"删除特写图: {'是' if cfg.get('delete_closeups', False) else '否'}", "delete_closeups"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
             (f"线框模式: {cfg.get('wireframe_mode', 'clay')}", "wireframe_mode"),
@@ -271,6 +288,7 @@ def edit_config(cfg):
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
             (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
             (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
+            (f"相机参考文件: {cfg.get('camera_json', '(不指定)') or '(不指定)'}", "camera_json"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
         ]
@@ -343,6 +361,11 @@ def edit_config(cfg):
             cfg["delete_views"] = not cur
             print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
 
+        elif key == "delete_closeups":
+            cur = cfg.get("delete_closeups", False)
+            cfg["delete_closeups"] = not cur
+            print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
+
         elif key == "parallel":
             sys.stdout.write(f"\n  {CYAN}并行渲染数 (当前 {cfg.get('parallel', 1)}, 建议不超过 CPU 核心数): {RESET}")
             sys.stdout.flush()
@@ -400,6 +423,18 @@ def edit_config(cfg):
             cur = cfg.get("export_metadata", False)
             cfg["export_metadata"] = not cur
             print(f"\n  {GREEN}已切换为: {'是' if not cur else '否'}{RESET}\n")
+
+        elif key == "camera_json":
+            cur = cfg.get("camera_json", "")
+            sys.stdout.write(f"\n  {CYAN}相机参考文件路径 (当前: {cur or '(不指定)'}, 留空清除): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip().strip('"').strip("'")
+            if raw:
+                cfg["camera_json"] = raw
+                print(f"  {GREEN}已设置为: {raw}{RESET}\n")
+            else:
+                cfg["camera_json"] = ""
+                print(f"  {GREEN}已清除{RESET}\n")
 
 
 def clear_render_folders(base_output, commands):

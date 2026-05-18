@@ -319,18 +319,19 @@ def main() -> None:
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        import_glb(glb_file)
-    else:
-        print("Wireframe: Warning - no glb_file specified")
-        return
-
     import importlib.util, os
     spec = importlib.util.spec_from_file_location(
         "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
+
+    glb_file = opts.get("glb_file")
+    if glb_file:
+        rv.import_model(bpy, glb_file)
+    else:
+        print("Wireframe: Warning - no glb_file specified")
+        return
+
     rv.normalize_model(bpy)
 
     scene = bpy.context.scene

@@ -77,9 +77,8 @@ class BlenderRenderer:
             "--background",
         ]
 
-        # For GLB imports, don't specify a blend file (start with empty scene)
-        if config.blend_file and config.blend_file.suffix.lower() not in [".glb", ".gltf"]:
-            cmd.append(str(config.blend_file))
+        # Always start with empty scene in script mode — the script imports the model
+        # (opening .blend as main scene and then appending from it via libraries.load fails)
 
         cmd += [
             "--python", str(script_path),

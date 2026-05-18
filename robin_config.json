@@ -1,24 +1,24 @@
 {
   "blender_path": "F:\\blender\\blender.exe",
   "resolution": [
-    1920,
-    1920
+    1024,
+    1024
   ],
   "parallel": 4,
   "views": [
     "diagonal",
     "front",
     "back",
-    "left",
-    "right",
-    "top"
+    "left"
   ],
-  "closeup_count": 2,
+  "closeup_count": 4,
   "composite": true,
   "uv_style": "color_grid",
   "delete_views": true,
   "export_metadata": false,
   "output_format": "PNG",
   "wireframe_mode": "normal",
-  "animation_frame": 20
+  "animation_frame": 1,
+  "delete_closeups": true,
+  "camera_json": ""
 }

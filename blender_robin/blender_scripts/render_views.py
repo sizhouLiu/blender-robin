@@ -79,6 +79,27 @@ def hash_select_env_texture(model_id: str):
 
 # ── Model normalization ───────────────────────────────────────────────────
 
+def import_model(bpy, filepath):
+    """Import a model file. Supports .glb, .gltf, and .blend files."""
+    import os
+
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete(use_global=False)
+
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext == ".blend":
+        # Append all objects from the .blend file into the current scene
+        with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
+            data_to.objects = list(data_from.objects)
+        for obj in data_to.objects:
+            if obj is not None:
+                bpy.context.collection.objects.link(obj)
+        print(f"Import: loaded .blend file {filepath} ({len(data_to.objects)} objects)")
+    else:
+        bpy.ops.import_scene.gltf(filepath=filepath)
+        print(f"Import: loaded {filepath}")
+
+
 def _get_model_mesh_objects(bpy):
     """
     Get mesh objects that belong to the imported model hierarchy.
@@ -218,7 +239,7 @@ def setup_camera(scene, center, bbox_size, resolution_x, resolution_y):
     aspect = resolution_x / resolution_y
     fov = cam_data.angle
 
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+    direction = mathutils.Vector((1.0, -1.0, 1.414)).normalized()
 
     cam_forward = -direction
     world_up = mathutils.Vector((0, 0, 1))
@@ -330,6 +351,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     closeup_count = opts.get("closeup_count", 0)
     do_composite = opts.get("composite", True)
     delete_views_after_composite = opts.get("delete_views_after_composite", False)
+    delete_closeups_after_composite = opts.get("delete_closeups_after_composite", False)
     export_meta = opts.get("export_metadata", False)
     animation_frame = opts.get("animation_frame", 1)  # Default to frame 1
 
@@ -449,50 +471,168 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         closeup_ratio = 0.10
         sub_radius = bbox_diagonal * closeup_ratio / 2.0
 
-        verts_world = []
-        for obj in mesh_objects:
-            obj_eval = obj.evaluated_get(depsgraph)
-            mesh_eval = obj_eval.to_mesh()
-            if mesh_eval is None:
-                continue
-            mat = obj_eval.matrix_world
-            for v in mesh_eval.vertices:
-                verts_world.append(mat @ v.co)
-            obj_eval.to_mesh_clear()
-
-        # Filter: only keep vertices within 80% of bbox from center
-        inner_half = bbox_size * 0.4
-        verts_inner = [
-            v for v in verts_world
-            if abs(v.x - center.x) <= inner_half.x
-            and abs(v.y - center.y) <= inner_half.y
-            and abs(v.z - center.z) <= inner_half.z
-        ]
-        if len(verts_inner) < 10:
-            verts_inner = verts_world
-
-        min_dist = bbox_diagonal * closeup_ratio * 0.8
+        # Try to load camera positions — priority: explicit camera_json > run_id cache
+        run_id = opts.get("run_id", "")
+        cache_suffix = f"_{run_id}" if run_id else ""
+        camera_cache_path = f"{output_dir}/{base_name}{cache_suffix}_cameras.json"
         chosen_points = []
-        max_attempts = 300
+        chosen_directions = []
+
+        ref_camera_json = opts.get("camera_json", "")
+        load_sources = []
+        if ref_camera_json and _os.path.exists(ref_camera_json):
+            load_sources.append((ref_camera_json, True))   # (path, count_must_match)
+        load_sources.append((camera_cache_path, True))
+
+        for src_path, must_match in load_sources:
+            if not _os.path.exists(src_path):
+                continue
+            try:
+                with open(src_path, "r") as f:
+                    cache_data = json.load(f)
+                cached_points = cache_data.get("closeup_focus_points", [])
+                cached_dirs = cache_data.get("closeup_directions", [])
+                if must_match and len(cached_points) != closeup_count:
+                    print(f"{label}: Camera JSON has {len(cached_points)} points but closeup_count={closeup_count}, skipping {src_path}")
+                    continue
+                # When loading from ref file with different count, use what's available
+                n = min(len(cached_points), len(cached_dirs), closeup_count)
+                chosen_points = [mathutils.Vector(p) for p in cached_points[:n]]
+                chosen_directions = [mathutils.Vector(d) for d in cached_dirs[:n]]
+                print(f"{label}: Loaded {n} closeup positions from {src_path}")
+                break
+            except Exception as e:
+                print(f"{label}: Failed to load camera JSON {src_path}: {e}")
+
+        # Generate new positions if cache miss
+        if len(chosen_points) != closeup_count:
+            verts_world = []
+            for obj in mesh_objects:
+                obj_eval = obj.evaluated_get(depsgraph)
+                mesh_eval = obj_eval.to_mesh()
+                if mesh_eval is None:
+                    continue
+                mat = obj_eval.matrix_world
+                for v in mesh_eval.vertices:
+                    verts_world.append(mat @ v.co)
+                obj_eval.to_mesh_clear()
+
+            # Filter: only keep vertices within 80% of bbox from center
+            inner_half = bbox_size * 0.4
+            verts_inner = [
+                v for v in verts_world
+                if abs(v.x - center.x) <= inner_half.x
+                and abs(v.y - center.y) <= inner_half.y
+                and abs(v.z - center.z) <= inner_half.z
+            ]
+            if len(verts_inner) < 10:
+                verts_inner = verts_world
+
+            # Build a voxel density map to score candidate points.
+            # Cells with more vertices represent dense geometry (seams, joints, details).
+            import mathutils as _mu
+            grid_res = 16
+            gx = max(bbox_size.x, 1e-6)
+            gy = max(bbox_size.y, 1e-6)
+            gz = max(bbox_size.z, 1e-6)
+            bmin = center - bbox_size * 0.5
+
+            def _voxel_key(v):
+                ix = int((v.x - bmin.x) / gx * grid_res)
+                iy = int((v.y - bmin.y) / gy * grid_res)
+                iz = int((v.z - bmin.z) / gz * grid_res)
+                return (
+                    min(max(ix, 0), grid_res - 1),
+                    min(max(iy, 0), grid_res - 1),
+                    min(max(iz, 0), grid_res - 1),
+                )
+
+            density = {}
+            for v in verts_world:
+                k = _voxel_key(v)
+                density[k] = density.get(k, 0) + 1
+
+            def _vert_score(v):
+                return density.get(_voxel_key(v), 1)
+
+            # Build weighted candidate pool from inner verts
+            scores = [_vert_score(v) for v in verts_inner]
+            total_score = sum(scores)
+
+            def _weighted_choice(pool, pool_scores, pool_total, rng):
+                r = rng.random() * pool_total
+                acc = 0.0
+                for v, s in zip(pool, pool_scores):
+                    acc += s
+                    if acc >= r:
+                        return v
+                return pool[-1]
+
+            min_dist = bbox_diagonal * closeup_ratio * 0.8
+            chosen_points = []
+            max_attempts = 500
+            rng = random.Random()
+
+            # Closeup camera directions: cycle through different angles
+            all_directions = [
+                mathutils.Vector((1.0, -1.0, 1.414)).normalized(),   # diagonal front
+                mathutils.Vector((-1.0, 1.0, 1.414)).normalized(),   # diagonal back
+                mathutils.Vector((0.0, -1.0, 1.0)).normalized(),     # front elevated
+                mathutils.Vector((0.0, 1.0, 1.0)).normalized(),      # back elevated
+                mathutils.Vector((-1.0, 0.0, 1.0)).normalized(),     # left elevated
+                mathutils.Vector((1.0, 0.0, 1.0)).normalized(),      # right elevated
+            ]
+            chosen_directions = []
+
+            for ci in range(closeup_count):
+                focus_point = center
+                if verts_inner:
+                    best_candidate = None
+                    best_score = -1
+                    for _ in range(max_attempts):
+                        candidate = _weighted_choice(verts_inner, scores, total_score, rng)
+                        if not chosen_points:
+                            focus_point = candidate
+                            best_candidate = None
+                            break
+                        dists = [(candidate - p).length for p in chosen_points]
+                        if min(dists) >= min_dist:
+                            s = _vert_score(candidate)
+                            if s > best_score:
+                                best_score = s
+                                best_candidate = candidate
+                            # Accept first high-density hit to avoid over-sampling
+                            if s >= max(scores) * 0.6:
+                                focus_point = candidate
+                                best_candidate = None
+                                break
+                    if best_candidate is not None:
+                        focus_point = best_candidate
+                chosen_points.append(focus_point)
+                chosen_directions.append(all_directions[ci % len(all_directions)])
+
+            # Save camera positions to cache; clean up stale cache files from previous runs
+            try:
+                import glob as _glob
+                for old in _glob.glob(f"{output_dir}/{base_name}_*_cameras.json"):
+                    if old != camera_cache_path:
+                        _os.remove(old)
+                cache_data = {
+                    "closeup_focus_points": [[p.x, p.y, p.z] for p in chosen_points],
+                    "closeup_directions": [[d.x, d.y, d.z] for d in chosen_directions],
+                    "bbox_center": [center.x, center.y, center.z],
+                    "bbox_size": [bbox_size.x, bbox_size.y, bbox_size.z],
+                }
+                with open(camera_cache_path, "w") as f:
+                    json.dump(cache_data, f, indent=2)
+                print(f"{label}: Saved {len(chosen_points)} closeup positions to {camera_cache_path}")
+            except Exception as e:
+                print(f"{label}: Failed to save camera cache: {e}")
 
         cam_data.type = 'PERSP'
         for ci in range(closeup_count):
             closeup_suffix = f"_closeup{ci + 1}"
-
-            focus_point = center
-            if verts_inner:
-                for _ in range(max_attempts):
-                    candidate = random.choice(verts_inner)
-                    if not chosen_points:
-                        focus_point = candidate
-                        break
-                    dists = [((candidate - p).length) for p in chosen_points]
-                    if min(dists) >= min_dist:
-                        focus_point = candidate
-                        break
-                else:
-                    focus_point = random.choice(verts_inner)
-            chosen_points.append(focus_point)
+            focus_point = chosen_points[ci]
             sub_bbox_size = mathutils.Vector((sub_radius * 2, sub_radius * 2, sub_radius * 2))
 
             radius = sub_bbox_size.length / 2.0
@@ -505,7 +645,8 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             half_angle = min(fov / 2.0, vfov / 2.0)
             dist = radius / math.sin(half_angle) * 1.15
 
-            direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+            # Use the cached/generated direction for this closeup
+            direction = chosen_directions[ci]
             camera.location = focus_point + direction * dist
             look_dir = focus_point - camera.location
             rot_quat = look_dir.to_track_quat('-Z', 'Y')
@@ -520,16 +661,13 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             print(f"{label}: closeup {ci + 1} rendered to {filepath}")
 
     # --- Composite ---
-    all_files = view_files + closeup_files
-    if do_composite and len(all_files) > 1:
-        w = render.resolution_x
-        h = render.resolution_y
-        cols = 4
-        rows = math.ceil(len(all_files) / cols)
-        canvas = bpy.data.images.new(f"{label}_All", width=w * cols, height=h * rows, alpha=True)
+    def _make_composite(bpy, files, out_path, w, h, cols, label_tag):
+        if len(files) == 0:
+            return
+        rows = math.ceil(len(files) / cols)
+        canvas = bpy.data.images.new(label_tag, width=w * cols, height=h * rows, alpha=True)
         canvas_pixels = [0.0] * (w * cols * h * rows * 4)
-
-        for i, fname in enumerate(all_files):
+        for i, fname in enumerate(files):
             col = i % cols
             row = rows - 1 - i // cols
             path = f"{output_dir}/{fname}.png"
@@ -542,13 +680,38 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 dst_start = (dst_y * w * cols + dst_x) * 4
                 canvas_pixels[dst_start:dst_start + w * 4] = src[src_start:src_start + w * 4]
             bpy.data.images.remove(img)
-
         canvas.pixels = canvas_pixels
         canvas.file_format = 'PNG'
-        all_path = f"{output_dir}/{base_name}_all.png"
-        canvas.save_render(all_path)
+        canvas.save_render(out_path)
         bpy.data.images.remove(canvas)
-        print(f"{label}: composite rendered to {all_path}")
+        print(f"{label}: composite saved to {out_path}")
+
+    def _best_cols(n, img_w, img_h):
+        """Return column count that makes the composite canvas closest to square."""
+        if n <= 1:
+            return 1
+        img_aspect = img_w / img_h
+        best_cols = 1
+        best_diff = float("inf")
+        for c in range(1, n + 1):
+            r = math.ceil(n / c)
+            canvas_aspect = (c * img_w) / (r * img_h)
+            diff = abs(math.log(canvas_aspect / img_aspect) if img_aspect else canvas_aspect)
+            diff = abs(math.log(canvas_aspect))
+            if diff < best_diff:
+                best_diff = diff
+                best_cols = c
+        return best_cols
+
+    if do_composite:
+        w = render.resolution_x
+        h = render.resolution_y
+        if len(view_files) > 1:
+            cols_v = _best_cols(len(view_files), w, h)
+            _make_composite(bpy, view_files, f"{output_dir}/{base_name}_all.png", w, h, cols_v, f"{label}_Views")
+        if len(closeup_files) > 1:
+            cols_c = _best_cols(len(closeup_files), w, h)
+            _make_composite(bpy, closeup_files, f"{output_dir}/{base_name}_closeup_all.png", w, h, cols_c, f"{label}_Closeups")
 
         if delete_views_after_composite:
             import os
@@ -558,6 +721,15 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 if os.path.exists(p):
                     os.remove(p)
                     print(f"{label}: deleted view {fname}{ext}")
+
+        if delete_closeups_after_composite:
+            import os
+            ext = "." + render.image_settings.file_format.lower().replace("jpeg", "jpg")
+            for fname in closeup_files:
+                p = f"{output_dir}/{fname}{ext}"
+                if os.path.exists(p):
+                    os.remove(p)
+                    print(f"{label}: deleted closeup {fname}{ext}")
 
     # --- Metadata ---
     if export_meta and meta_locations:

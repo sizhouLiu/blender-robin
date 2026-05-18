@@ -30,8 +30,7 @@ def setup_albedo_compositor(output_dir, base_name):
 
     # Blender 5.x: use compositing_node_group; Blender 4.x: use node_tree
     if hasattr(scene, 'compositing_node_group'):
-        tree = scene.com
-        positing_node_group
+        tree = scene.compositing_node_group
         if tree is None:
             tree = bpy.data.node_groups.new("Albedo_Compositor", 'CompositorNodeTree')
             scene.compositing_node_group = tree
@@ -66,18 +65,19 @@ def main() -> None:
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        import_glb(glb_file)
-    else:
-        print("Albedo: Warning - no glb_file specified")
-        return
-
     import importlib.util, os
     spec = importlib.util.spec_from_file_location(
         "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
+
+    glb_file = opts.get("glb_file")
+    if glb_file:
+        rv.import_model(bpy, glb_file)
+    else:
+        print("Albedo: Warning - no glb_file specified")
+        return
+
     rv.normalize_model(bpy)
 
     scene = bpy.context.scene

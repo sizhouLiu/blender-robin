@@ -40,7 +40,7 @@ def frame_camera_on_bbox(camera, center, bbox_size, resolution_x, resolution_y):
     aspect = resolution_x / resolution_y
     fov = cam_data.angle
 
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+    direction = mathutils.Vector((1.0, -1.0, 1.414)).normalized()
 
     cam_forward = -direction
     world_up = mathutils.Vector((0, 0, 1))
@@ -89,7 +89,7 @@ def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
     half_angle = min(fov / 2.0, vfov / 2.0)
     distance = radius / math.sin(half_angle) * 1.15
 
-    direction = mathutils.Vector((1.0, -1.0, 0.6)).normalized()
+    direction = mathutils.Vector((1.0, -1.0, 1.414)).normalized()
     camera.location = center + direction * distance
 
     look_dir = center - camera.location
@@ -110,18 +110,19 @@ def main() -> None:
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        import_glb(glb_file)
-    else:
-        print("RGB Closeup: Warning - no glb_file specified")
-        return
-
     import importlib.util, os
     spec = importlib.util.spec_from_file_location(
         "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
+
+    glb_file = opts.get("glb_file")
+    if glb_file:
+        rv.import_model(bpy, glb_file)
+    else:
+        print("RGB Closeup: Warning - no glb_file specified")
+        return
+
     rv.normalize_model(bpy)
 
     scene = bpy.context.scene

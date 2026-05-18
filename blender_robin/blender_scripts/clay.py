@@ -25,8 +25,7 @@ def setup_workbench_matcap(scene, matcap_name="basic_grey.exr"):
     shading = scene.display.shading
     shading.light = 'MATCAP'
     shading.color_type = 'MATERIAL'
-    shading.background_type = 'VIEWPORT'
-    shading.background_color = (0.05, 0.05, 0.05)  # near-black for clean keying
+    shading.background_type = 'THEME'  # transparent background in Workbench render
 
     # Try to set the requested matcap
     try:
@@ -70,18 +69,19 @@ def main() -> None:
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        import_glb(glb_file)
-    else:
-        print("Clay: Warning - no glb_file specified")
-        return
-
     import importlib.util, os
     spec = importlib.util.spec_from_file_location(
         "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
+
+    glb_file = opts.get("glb_file")
+    if glb_file:
+        rv.import_model(bpy, glb_file)
+    else:
+        print("Clay: Warning - no glb_file specified")
+        return
+
     rv.normalize_model(bpy)
 
     scene = bpy.context.scene
@@ -94,7 +94,8 @@ def main() -> None:
 
     fmt = config.get("output_format", "PNG")
     render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGB'
+    render.image_settings.color_mode = 'RGBA'
+    render.film_transparent = True
 
     matcap_name = opts.get("matcap", "basic_grey.exr")
     setup_workbench_matcap(scene, matcap_name)

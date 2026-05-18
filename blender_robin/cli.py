@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tomllib
+import uuid
 from pathlib import Path
 
 import click
@@ -11,6 +13,16 @@ from .progress import FrameProgress
 from .queue import JobStatus, RenderQueue
 from .renderer import BlenderRenderer
 from .worker import QueueWorker
+
+
+def _glob_models(dir_path: Path, pattern: str) -> list[Path]:
+    """Glob model files. Pattern can be comma-separated (e.g. '*.glb,*.blend')."""
+    files: list[Path] = []
+    for p in pattern.split(","):
+        p = p.strip()
+        if p:
+            files.extend(dir_path.glob(p))
+    return sorted(set(files))
 
 
 def _print_progress(p: FrameProgress) -> None:
@@ -36,6 +48,7 @@ def cli(ctx: click.Context, blender: str | None, verbose: bool) -> None:
     ctx.ensure_object(dict)
     ctx.obj["blender_override"] = blender
     ctx.obj["verbose"] = verbose
+    ctx.obj["run_id"] = uuid.uuid4().hex[:8]
 
 
 def _get_renderer(ctx: click.Context, with_progress: bool = True) -> BlenderRenderer:
@@ -166,6 +179,8 @@ def _common_render_options(f):
     f = click.option("--closeup-count", type=int, default=1, help="Number of random closeup shots.")(f)
     f = click.option("--no-composite", is_flag=True, help="Skip composite image generation.")(f)
     f = click.option("--delete-views", is_flag=True, help="Delete individual view images after compositing (keep only closeups + composite).")(f)
+    f = click.option("--delete-closeups", is_flag=True, help="Delete individual closeup images after compositing (keep only composite).")(f)
+    f = click.option("--camera-json", type=click.Path(), default=None, help="Path to a _cameras.json file to reuse closeup positions across models.")(f)
     f = click.option("--hdri", type=click.Path(), default=None, help="Path to HDRI .exr environment textures folder.")(f)
     f = click.option("--env-texture", type=str, default=None, help="Specific HDRI file name to use.")(f)
     f = click.option("--export-metadata", is_flag=True, help="Export meta.json with camera matrices.")(f)
@@ -177,12 +192,14 @@ def _common_render_options(f):
 
 
 def _build_script_options(glb_file, views, closeup_count, no_composite, delete_views,
-                         hdri, env_texture, export_metadata, animation_frame, **extra):
+                         hdri, env_texture, export_metadata, animation_frame, run_id=None,
+                         delete_closeups=False, camera_json=None, **extra):
     opts = {
         "glb_file": str(glb_file),
         "closeup_count": closeup_count,
         "composite": not no_composite,
         "delete_views_after_composite": delete_views,
+        "delete_closeups_after_composite": delete_closeups,
         "export_metadata": export_metadata,
     }
     if views:
@@ -193,6 +210,10 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
             opts["env_texture"] = env_texture
     if animation_frame is not None:
         opts["animation_frame"] = animation_frame
+    if run_id is not None:
+        opts["run_id"] = run_id
+    if camera_json:
+        opts["camera_json"] = camera_json
     opts.update(extra)
     return opts
 
@@ -213,7 +234,7 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
              style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
-             delete_views: bool, hdri: str | None, env_texture: str | None,
+             delete_views: bool, delete_closeups: bool, camera_json: str | None, hdri: str | None, env_texture: str | None,
              export_metadata: bool, animation_frame: int | None, output_format: str,
              pattern: str, parallel: int, dry_run: bool) -> None:
     """Render UV checker maps for all GLB/GLTF files in a directory."""
@@ -221,7 +242,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -242,7 +263,9 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
-                style=style, scale=scale,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
             ),
         )
         configs.append(cfg)
@@ -280,8 +303,8 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-                views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-                hdri: str | None, env_texture: str | None, export_metadata: bool,
+                views: str | None, closeup_count: int, no_composite: bool, delete_views: bool, delete_closeups: bool,
+                camera_json: str | None, hdri: str | None, env_texture: str | None, export_metadata: bool,
                 animation_frame: int | None, output_format: str,
                 pattern: str, parallel: int, dry_run: bool) -> None:
     """Render RGB full-body + random closeup for all GLB/GLTF files."""
@@ -289,7 +312,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -310,6 +333,9 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
             ),
         )
         configs.append(cfg)
@@ -353,7 +379,8 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
 @click.pass_context
 def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
               wire_size: float, wireframe_mode: str, views: str | None, closeup_count: int,
-              no_composite: bool, delete_views: bool, hdri: str | None, env_texture: str | None,
+              no_composite: bool, delete_views: bool, delete_closeups: bool, camera_json: str | None,
+              hdri: str | None, env_texture: str | None,
               export_metadata: bool, animation_frame: int | None, output_format: str,
               pattern: str, parallel: int, dry_run: bool) -> None:
     """Render wireframe-on-white for all GLB/GLTF files.
@@ -372,7 +399,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -393,6 +420,9 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
                 wire_size=wire_size,
                 wireframe_mode=wireframe_mode.lower(),
             ),
@@ -433,8 +463,8 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-         matcap: str, views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-         hdri: str | None, env_texture: str | None, export_metadata: bool,
+         matcap: str, views: str | None, closeup_count: int, no_composite: bool, delete_views: bool, delete_closeups: bool,
+         camera_json: str | None, hdri: str | None, env_texture: str | None, export_metadata: bool,
          animation_frame: int | None, output_format: str,
          pattern: str, parallel: int, dry_run: bool) -> None:
     """Render white clay model for all GLB/GLTF files."""
@@ -442,7 +472,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -463,6 +493,9 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
                 matcap=matcap,
             ),
         )
@@ -501,8 +534,8 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def normal_map(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-               views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-               hdri: str | None, env_texture: str | None, export_metadata: bool,
+               views: str | None, closeup_count: int, no_composite: bool, delete_views: bool, delete_closeups: bool,
+               camera_json: str | None, hdri: str | None, env_texture: str | None, export_metadata: bool,
                animation_frame: int | None, output_format: str,
                pattern: str, parallel: int, dry_run: bool) -> None:
     """Render surface normal maps (camera-space) for all GLB/GLTF files."""
@@ -510,7 +543,7 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -531,6 +564,9 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
             ),
         )
         configs.append(cfg)
@@ -568,8 +604,8 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-           views: str | None, closeup_count: int, no_composite: bool, delete_views: bool,
-           hdri: str | None, env_texture: str | None, export_metadata: bool,
+           views: str | None, closeup_count: int, no_composite: bool, delete_views: bool, delete_closeups: bool,
+           camera_json: str | None, hdri: str | None, env_texture: str | None, export_metadata: bool,
            animation_frame: int | None, output_format: str,
            pattern: str, parallel: int, dry_run: bool) -> None:
     """Render albedo (diffuse color, no lighting) for all GLB/GLTF files."""
@@ -577,7 +613,7 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
     dir_path = Path(directory)
     (output_dir / "global").mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
@@ -598,6 +634,9 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
             script_options=_build_script_options(
                 model_file, views, closeup_count, no_composite, delete_views,
                 hdri, env_texture, export_metadata, animation_frame,
+                run_id=ctx.obj["run_id"],
+                delete_closeups=delete_closeups,
+                camera_json=camera_json,
             ),
         )
         configs.append(cfg)
@@ -641,7 +680,7 @@ def normalize(ctx: click.Context, directory: str, output: str, target_size: floa
     dir_path = Path(directory)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    model_files = sorted(dir_path.glob(pattern))
+    model_files = _glob_models(dir_path, pattern)
     if not model_files:
         click.echo(f"No files matching '{pattern}' found in {directory}")
         return
