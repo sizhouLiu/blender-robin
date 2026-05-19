@@ -17,7 +17,7 @@
   "delete_views": true,
   "export_metadata": false,
   "output_format": "PNG",
-  "wireframe_mode": "normal",
+  "wireframe_mode": "clay",
   "animation_frame": 1,
   "delete_closeups": true,
   "camera_json": ""

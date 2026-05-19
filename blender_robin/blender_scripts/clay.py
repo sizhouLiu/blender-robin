@@ -41,7 +41,7 @@ def create_simple_gray_material():
     import bpy
 
     mat = bpy.data.materials.new(name="Clay_Gray")
-    mat.diffuse_color = (0.82, 0.82, 0.82, 1.0)
+    mat.diffuse_color = (0.95, 0.95, 0.95, 1.0)  # Brighter white
     return mat
 
 

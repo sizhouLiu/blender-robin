@@ -471,44 +471,27 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         closeup_ratio = 0.10
         sub_radius = bbox_diagonal * closeup_ratio / 2.0
 
-        # Try to load camera positions — priority: explicit camera_json > batch shared cache > per-model cache
-        run_id = opts.get("run_id", "")
-        cache_suffix = f"_{run_id}" if run_id else ""
-        camera_cache_path = f"{output_dir}/{base_name}{cache_suffix}_cameras.json"
-        # Batch-level shared cache: stored one level up (input/ dir), shared across all models in this run
-        input_dir = _os.path.dirname(output_dir)
-        batch_cache_path = f"{input_dir}/{run_id}_shared_cameras.json" if run_id else ""
+        # Load camera positions only from explicit camera_json; otherwise always generate randomly
         chosen_points = []
         chosen_directions = []
 
         ref_camera_json = opts.get("camera_json", "")
-        load_sources = []
         if ref_camera_json and _os.path.exists(ref_camera_json):
-            load_sources.append(ref_camera_json)
-        if batch_cache_path and _os.path.exists(batch_cache_path):
-            load_sources.append(batch_cache_path)
-        load_sources.append(camera_cache_path)
-
-        for src_path in load_sources:
-            if not _os.path.exists(src_path):
-                continue
             try:
-                with open(src_path, "r") as f:
+                with open(ref_camera_json, "r") as f:
                     cache_data = json.load(f)
                 cached_points = cache_data.get("closeup_focus_points", [])
                 cached_dirs = cache_data.get("closeup_directions", [])
-                if len(cached_points) < closeup_count or len(cached_dirs) < closeup_count:
-                    print(f"{label}: Camera JSON has {len(cached_points)} points but need {closeup_count}, skipping {src_path}")
-                    continue
-                n = min(len(cached_points), len(cached_dirs), closeup_count)
-                chosen_points = [mathutils.Vector(p) for p in cached_points[:n]]
-                chosen_directions = [mathutils.Vector(d) for d in cached_dirs[:n]]
-                print(f"{label}: Loaded {n} closeup positions from {src_path}")
-                break
+                if len(cached_points) >= closeup_count and len(cached_dirs) >= closeup_count:
+                    n = min(len(cached_points), len(cached_dirs), closeup_count)
+                    chosen_points = [mathutils.Vector(p) for p in cached_points[:n]]
+                    chosen_directions = [mathutils.Vector(d) for d in cached_dirs[:n]]
+                    print(f"{label}: Loaded {n} closeup positions from {ref_camera_json}")
+                else:
+                    print(f"{label}: camera_json has {len(cached_points)} points but need {closeup_count}, ignoring")
             except Exception as e:
-                print(f"{label}: Failed to load camera JSON {src_path}: {e}")
+                print(f"{label}: Failed to load camera_json {ref_camera_json}: {e}")
 
-        # Generate new positions if cache miss
         if len(chosen_points) != closeup_count:
             verts_world = []
             for obj in mesh_objects:
@@ -615,26 +598,20 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 chosen_points.append(focus_point)
                 chosen_directions.append(all_directions[ci % len(all_directions)])
 
-            # Save camera positions to per-model cache and batch shared cache
+            # Save camera positions to per-model cache
             try:
-                import glob as _glob
-                for old in _glob.glob(f"{output_dir}/{base_name}_*_cameras.json"):
-                    if old != camera_cache_path:
-                        _os.remove(old)
                 cache_data = {
                     "closeup_focus_points": [[p.x, p.y, p.z] for p in chosen_points],
                     "closeup_directions": [[d.x, d.y, d.z] for d in chosen_directions],
                     "bbox_center": [center.x, center.y, center.z],
                     "bbox_size": [bbox_size.x, bbox_size.y, bbox_size.z],
                 }
+                run_id = opts.get("run_id", "")
+                cache_suffix = f"_{run_id}" if run_id else ""
+                camera_cache_path = f"{output_dir}/{base_name}{cache_suffix}_cameras.json"
                 with open(camera_cache_path, "w") as f:
                     json.dump(cache_data, f, indent=2)
                 print(f"{label}: Saved {len(chosen_points)} closeup positions to {camera_cache_path}")
-                # Also write to batch shared cache so other models in same run reuse these positions
-                if batch_cache_path and not _os.path.exists(batch_cache_path):
-                    with open(batch_cache_path, "w") as f:
-                        json.dump(cache_data, f, indent=2)
-                    print(f"{label}: Saved shared batch camera cache to {batch_cache_path}")
             except Exception as e:
                 print(f"{label}: Failed to save camera cache: {e}")
 
@@ -656,11 +633,44 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
 
             # Use the cached/generated direction for this closeup
             direction = chosen_directions[ci]
-            camera.location = focus_point + direction * dist
+            cam_pos = focus_point + direction * dist
+
+            # Ensure camera is outside the model's bounding box to prevent blank renders
+            half_bbox = bbox_size * 0.5
+            bbox_min = center - half_bbox
+            bbox_max = center + half_bbox
+
+            # Check if camera is inside bounding box
+            inside = (bbox_min.x < cam_pos.x < bbox_max.x and
+                     bbox_min.y < cam_pos.y < bbox_max.y and
+                     bbox_min.z < cam_pos.z < bbox_max.z)
+
+            if inside:
+                # Push camera outside the bounding box along the direction vector
+                # Calculate how far we need to move to exit each face
+                extra_dist = 0.0
+                for axis in range(3):
+                    if abs(direction[axis]) > 1e-6:
+                        if direction[axis] > 0:
+                            # Moving in positive direction, exit through max face
+                            exit_dist = (bbox_max[axis] - cam_pos[axis]) / direction[axis]
+                        else:
+                            # Moving in negative direction, exit through min face
+                            exit_dist = (bbox_min[axis] - cam_pos[axis]) / direction[axis]
+                        if exit_dist > 0:
+                            extra_dist = max(extra_dist, exit_dist)
+
+                # Add safety margin (5% of max dimension)
+                safety_margin = max_dim * 0.05
+                cam_pos = cam_pos + direction * (extra_dist + safety_margin)
+                dist = (cam_pos - focus_point).length
+                print(f"{label}: closeup {ci + 1} camera was inside bbox, pushed out by {extra_dist + safety_margin:.3f}")
+
+            camera.location = cam_pos
             look_dir = focus_point - camera.location
             rot_quat = look_dir.to_track_quat('-Z', 'Y')
             camera.rotation_euler = rot_quat.to_euler()
-            cam_data.clip_start = max(0.001, dist * 0.01)
+            cam_data.clip_start = max(0.0001, dist * 0.005)
             cam_data.clip_end = dist * 5
 
             filepath = f"{output_dir}/{base_name}{closeup_suffix}"
