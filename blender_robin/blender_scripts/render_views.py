@@ -471,20 +471,25 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         closeup_ratio = 0.10
         sub_radius = bbox_diagonal * closeup_ratio / 2.0
 
-        # Try to load camera positions — priority: explicit camera_json > run_id cache
+        # Try to load camera positions — priority: explicit camera_json > batch shared cache > per-model cache
         run_id = opts.get("run_id", "")
         cache_suffix = f"_{run_id}" if run_id else ""
         camera_cache_path = f"{output_dir}/{base_name}{cache_suffix}_cameras.json"
+        # Batch-level shared cache: stored one level up (input/ dir), shared across all models in this run
+        input_dir = _os.path.dirname(output_dir)
+        batch_cache_path = f"{input_dir}/{run_id}_shared_cameras.json" if run_id else ""
         chosen_points = []
         chosen_directions = []
 
         ref_camera_json = opts.get("camera_json", "")
         load_sources = []
         if ref_camera_json and _os.path.exists(ref_camera_json):
-            load_sources.append((ref_camera_json, True))   # (path, count_must_match)
-        load_sources.append((camera_cache_path, True))
+            load_sources.append(ref_camera_json)
+        if batch_cache_path and _os.path.exists(batch_cache_path):
+            load_sources.append(batch_cache_path)
+        load_sources.append(camera_cache_path)
 
-        for src_path, must_match in load_sources:
+        for src_path in load_sources:
             if not _os.path.exists(src_path):
                 continue
             try:
@@ -492,10 +497,9 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                     cache_data = json.load(f)
                 cached_points = cache_data.get("closeup_focus_points", [])
                 cached_dirs = cache_data.get("closeup_directions", [])
-                if must_match and len(cached_points) != closeup_count:
-                    print(f"{label}: Camera JSON has {len(cached_points)} points but closeup_count={closeup_count}, skipping {src_path}")
+                if len(cached_points) < closeup_count or len(cached_dirs) < closeup_count:
+                    print(f"{label}: Camera JSON has {len(cached_points)} points but need {closeup_count}, skipping {src_path}")
                     continue
-                # When loading from ref file with different count, use what's available
                 n = min(len(cached_points), len(cached_dirs), closeup_count)
                 chosen_points = [mathutils.Vector(p) for p in cached_points[:n]]
                 chosen_directions = [mathutils.Vector(d) for d in cached_dirs[:n]]
@@ -611,7 +615,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 chosen_points.append(focus_point)
                 chosen_directions.append(all_directions[ci % len(all_directions)])
 
-            # Save camera positions to cache; clean up stale cache files from previous runs
+            # Save camera positions to per-model cache and batch shared cache
             try:
                 import glob as _glob
                 for old in _glob.glob(f"{output_dir}/{base_name}_*_cameras.json"):
@@ -626,6 +630,11 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 with open(camera_cache_path, "w") as f:
                     json.dump(cache_data, f, indent=2)
                 print(f"{label}: Saved {len(chosen_points)} closeup positions to {camera_cache_path}")
+                # Also write to batch shared cache so other models in same run reuse these positions
+                if batch_cache_path and not _os.path.exists(batch_cache_path):
+                    with open(batch_cache_path, "w") as f:
+                        json.dump(cache_data, f, indent=2)
+                    print(f"{label}: Saved shared batch camera cache to {batch_cache_path}")
             except Exception as e:
                 print(f"{label}: Failed to save camera cache: {e}")
 
