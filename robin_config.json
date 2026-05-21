@@ -12,13 +12,13 @@
     "left"
   ],
   "closeup_count": 4,
-  "composite": true,
+  "composite": false,
   "uv_style": "color_grid",
-  "delete_views": true,
+  "delete_views": false,
   "export_metadata": false,
   "output_format": "PNG",
   "wireframe_mode": "clay",
   "animation_frame": 1,
-  "delete_closeups": true,
+  "delete_closeups": false,
   "camera_json": ""
 }

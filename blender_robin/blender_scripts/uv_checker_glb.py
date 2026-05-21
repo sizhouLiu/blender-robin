@@ -6,167 +6,336 @@ Invoked via: blender --background --python uv_checker_glb.py -- <json_config>
 import json
 import sys
 
+_log_file = None
 
-def import_glb(filepath):
+
+def log(msg):
+    print(msg, flush=True)
+    if _log_file:
+        try:
+            _log_file.write(msg + "\n")
+            _log_file.flush()
+        except Exception:
+            pass
+
+
+def load_color_grid_image():
+    """Load color_grid.png from script directory. Fail fast if missing."""
+    import bpy, os
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    png_path = os.path.join(script_dir, "color_grid.png")
+    if not os.path.exists(png_path):
+        raise FileNotFoundError(
+            f"UV Checker: color_grid.png not found at {png_path}. "
+            "Run generate_color_grid.py first."
+        )
+    img = bpy.data.images.load(png_path, check_existing=True)
+    img.colorspace_settings.name = 'sRGB'
+    log(f"UV Checker: loaded color grid from {png_path} ({img.size[0]}x{img.size[1]})")
+    return img
+
+
+def _bake_uv_image(obj, output_path, size, seams_only):
+    """
+    Draw UV edges for obj onto a transparent canvas and save as PNG.
+    seams_only=True: only edges where adjacent faces have different UV coords (seams).
+    seams_only=False: all UV edges (island outlines + interior).
+    Returns True on success.
+    """
+    import bpy, os, bmesh
+    import numpy as np
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    width, height = size
+    canvas = np.zeros((height, width, 4), dtype=np.float32)
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    if not bm.loops.layers.uv.active:
+        bm.free()
+        log(f"UV Checker: WARNING - '{obj.name}' has no active UV layer")
+        return False
+
+    uv_layer = bm.loops.layers.uv.active
+    UV_EPS = 1e-5  # tolerance for UV coordinate comparison
+
+    uv_edges = []
+
+    if seams_only:
+        # A UV seam is an edge shared by 2+ faces where the UV coords differ on the two sides.
+        # For each edge, collect the UV coords from all adjacent loops.
+        # If the two sides disagree → seam.
+        for edge in bm.edges:
+            if len(edge.link_faces) < 2:
+                # Boundary edge — always a seam in UV space
+                for face in edge.link_faces:
+                    for loop in face.loops:
+                        if loop.edge == edge:
+                            uv1 = loop[uv_layer].uv.copy()
+                            uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                            uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+                            break
+            else:
+                # Collect the UV pair for this edge from each adjacent face
+                side_uvs = []
+                for face in edge.link_faces:
+                    for loop in face.loops:
+                        if loop.edge == edge:
+                            uv1 = loop[uv_layer].uv.copy()
+                            uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                            side_uvs.append((uv1, uv2))
+                            break
+                # Compare first side against all others
+                if len(side_uvs) >= 2:
+                    u1a, u1b = side_uvs[0]
+                    is_seam = False
+                    for u2a, u2b in side_uvs[1:]:
+                        # The other side connects the same verts but in reverse order
+                        if ((abs(u1a.x - u2b.x) > UV_EPS or abs(u1a.y - u2b.y) > UV_EPS) or
+                                (abs(u1b.x - u2a.x) > UV_EPS or abs(u1b.y - u2a.y) > UV_EPS)):
+                            is_seam = True
+                            break
+                    if is_seam:
+                        uv_edges.append((u1a.x, u1a.y, u1b.x, u1b.y))
+    else:
+        # All UV edges: just walk every face's loops
+        for face in bm.faces:
+            loops = face.loops
+            n = len(loops)
+            for i, loop in enumerate(loops):
+                uv1 = loop[uv_layer].uv
+                uv2 = loops[(i + 1) % n][uv_layer].uv
+                uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+
+    bm.free()
+
+    if uv_edges:
+        uv_edges = np.array(uv_edges, dtype=np.float32)
+        uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width,  0, width  - 1)
+        uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
+
+        for x0, y0, x1, y1 in uv_edges.astype(int):
+            _draw_line_numpy(canvas, x0, y0, x1, y1, width, height)
+
+    img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
+    img.pixels.foreach_set(canvas.ravel())
+    img.save_render(output_path)
+    bpy.data.images.remove(img)
+    return True
+
+
+def export_uv_layout_for_mesh(obj, output_path, size=(1024, 1024)):
+    """Export full UV layout (all edges) for UV layout composite image."""
+    import bpy, os, bmesh
+    import numpy as np
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    # Try bpy.ops.uv.export_layout first (works in GUI mode)
+    try:
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        if bpy.context.object and bpy.context.object.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+
+        result = bpy.ops.uv.export_layout(
+            filepath=output_path,
+            export_all=True,
+            mode='PNG',
+            size=size,
+            opacity=0.0,
+            check_existing=False,
+        )
+
+        if 'FINISHED' in result:
+            log(f"UV Checker: exported UV layout for '{obj.name}' to {output_path}")
+            return True
+    except (RuntimeError, SystemError):
+        log(f"UV Checker: bpy.ops.uv.export_layout unavailable (background mode), using bmesh fallback")
+
+    success = _bake_uv_image(obj, output_path, size, seams_only=False)
+    if success:
+        log(f"UV Checker: exported UV layout for '{obj.name}' to {output_path} (bmesh fallback)")
+    else:
+        log(f"UV Checker: WARNING - UV layout export failed for '{obj.name}'")
+    return success
+
+
+def bake_seam_overlay_for_mesh(obj, output_path, size=(1024, 1024)):
+    """Bake UV seam lines only (UV-discontinuous edges) for use as red overlay in material."""
+    success = _bake_uv_image(obj, output_path, size, seams_only=True)
+    if success:
+        log(f"UV Checker: baked seam overlay for '{obj.name}' to {output_path}")
+    else:
+        log(f"UV Checker: WARNING - seam overlay bake failed for '{obj.name}'")
+    return success
+
+
+def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height):
+    """Draw a line on canvas using Bresenham algorithm (numpy vectorized)."""
+    import numpy as np
+
+    # Bresenham's line algorithm
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+
+    x, y = x0, y0
+    points = []
+
+    while True:
+        if 0 <= x < width and 0 <= y < height:
+            points.append((y, x))
+
+        if x == x1 and y == y1:
+            break
+
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+
+    # Set pixels (white lines on transparent background)
+    if points:
+        points = np.array(points)
+        canvas[points[:, 0], points[:, 1]] = [1.0, 1.0, 1.0, 1.0]
+
+
+def create_per_mesh_material(obj, grid_img, uv_layout_img):
+    """Create material with color grid base + red seam overlay."""
     import bpy
 
-    # Clear default scene objects (cube, light, camera)
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete(use_global=False)
-
-    bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"UV Checker: imported {filepath}")
-
-
-def create_color_grid_material():
-    import bpy
-    import colorsys
-
-    mat = bpy.data.materials.new(name="UV_Checker")
+    mat_name = f"UV_Checker_{obj.name}"
+    mat = bpy.data.materials.new(name=mat_name)
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
 
+    # Output
     output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (400, 0)
+    output.location = (500, 0)
 
+    # Principled BSDF
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.location = (200, 0)
+    bsdf.inputs["Roughness"].default_value = 1.0
+    # Set specular to 0 (name differs between Blender 3.x and 4.x)
+    spec_input = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
+    if spec_input:
+        spec_input.default_value = 0.0
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
-    width, height = 2048, 2048
-    img = bpy.data.images.new(name="UV_Test_Grid", width=width, height=height, alpha=False)
-
-    cell_size = 128
-    grid_w = width // cell_size
-    grid_h = height // cell_size
-
-    # 3x5 bitmap font for hex digits (MSB = leftmost pixel)
-    FONT = {
-        '0': [0b111, 0b101, 0b101, 0b101, 0b111],
-        '1': [0b010, 0b110, 0b010, 0b010, 0b111],
-        '2': [0b111, 0b001, 0b111, 0b100, 0b111],
-        '3': [0b111, 0b001, 0b111, 0b001, 0b111],
-        '4': [0b101, 0b101, 0b111, 0b001, 0b001],
-        '5': [0b111, 0b100, 0b111, 0b001, 0b111],
-        '6': [0b111, 0b100, 0b111, 0b101, 0b111],
-        '7': [0b111, 0b001, 0b010, 0b010, 0b010],
-        '8': [0b111, 0b101, 0b111, 0b101, 0b111],
-        '9': [0b111, 0b101, 0b111, 0b001, 0b111],
-        'A': [0b010, 0b101, 0b111, 0b101, 0b101],
-        'B': [0b110, 0b101, 0b110, 0b101, 0b110],
-        'C': [0b011, 0b100, 0b100, 0b100, 0b011],
-        'D': [0b110, 0b101, 0b101, 0b101, 0b110],
-        'E': [0b111, 0b100, 0b110, 0b100, 0b111],
-        'F': [0b111, 0b100, 0b110, 0b100, 0b100],
-    }
-    FONT_W, FONT_H = 3, 5
-    SCALE = 3
-
-    # Generate 256 distinct colors using golden angle for maximum hue spread
-    cell_colors = []
-    for i in range(grid_w * grid_h):
-        hue = (i * 0.618033988749895) % 1.0
-        sat = 0.5 + (i % 3) * 0.15
-        val = 0.65 + (i % 2) * 0.2
-        r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
-        cell_colors.append((r, g, b))
-
-    pixels = [0.0] * (width * height * 4)
-
-    def put(px, py, r, g, b):
-        if 0 <= px < width and 0 <= py < height:
-            i = (py * width + px) * 4
-            pixels[i] = r
-            pixels[i + 1] = g
-            pixels[i + 2] = b
-            pixels[i + 3] = 1.0
-
-    # Fill all cells (optimized with slice assignment)
-    for row in range(grid_h):
-        for col in range(grid_w):
-            r, g, b = cell_colors[row * grid_w + col]
-            x0 = col * cell_size
-            y0 = row * cell_size
-            row_data = [r, g, b, 1.0] * cell_size
-            for y in range(y0, y0 + cell_size):
-                start = (y * width + x0) * 4
-                pixels[start:start + cell_size * 4] = row_data
-
-    # Draw decorations on each cell
-    for row in range(grid_h):
-        for col in range(grid_w):
-            r, g, b = cell_colors[row * grid_w + col]
-            x0 = col * cell_size
-            y0 = row * cell_size
-
-            # Border (2px, darkened)
-            br, bg, bb = r * 0.3, g * 0.3, b * 0.3
-            for i in range(2):
-                for x in range(x0, x0 + cell_size):
-                    put(x, y0 + i, br, bg, bb)
-                    put(x, y0 + cell_size - 1 - i, br, bg, bb)
-                for y in range(y0, y0 + cell_size):
-                    put(x0 + i, y, br, bg, bb)
-                    put(x0 + cell_size - 1 - i, y, br, bg, bb)
-
-            # Crosshair at center (thin +)
-            cx = x0 + cell_size // 2
-            cy = y0 + cell_size // 2
-            cr, cg, cb = r * 0.4, g * 0.4, b * 0.4
-            for i in range(-12, 13):
-                put(cx + i, cy, cr, cg, cb)
-                put(cx, cy + i, cr, cg, cb)
-
-            # Text color: contrast against background
-            lum = 0.299 * r + 0.587 * g + 0.114 * b
-            tr, tg, tb = (0.05, 0.05, 0.05) if lum > 0.45 else (0.95, 0.95, 0.95)
-
-            # Draw hex label (e.g. "3B" = row 3, col B)
-            label = f"{row:X}{col:X}"
-            char_w_scaled = FONT_W * SCALE
-            spacing = SCALE
-            total_w = len(label) * char_w_scaled + (len(label) - 1) * spacing
-            text_x = x0 + (cell_size - total_w) // 2
-            text_y = y0 + cell_size // 2 + 10
-
-            for ci, ch in enumerate(label):
-                glyph = FONT.get(ch)
-                if not glyph:
-                    continue
-                gx0 = text_x + ci * (char_w_scaled + spacing)
-                for gy, glyph_row in enumerate(glyph):
-                    for gx in range(FONT_W):
-                        if glyph_row & (1 << (FONT_W - 1 - gx)):
-                            for sy in range(SCALE):
-                                for sx in range(SCALE):
-                                    px = gx0 + gx * SCALE + sx
-                                    py = text_y + (FONT_H - 1 - gy) * SCALE + sy
-                                    put(px, py, tr, tg, tb)
-
-            # L-shape direction marker (bottom-left corner of cell)
-            lx = x0 + 8
-            ly = y0 + 6
-            for i in range(20):
-                for t in range(2):
-                    put(lx + t, ly + i, tr, tg, tb)
-                    put(lx + i, ly + t, tr, tg, tb)
-
-    img.pixels = pixels
-    print(f"UV Checker: generated {grid_w}x{grid_h} color grid ({cell_size}px cells)")
-
-    tex = nodes.new("ShaderNodeTexImage")
-    tex.image = img
-    tex.location = (-200, 0)
-
+    # UV coordinate source
     tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-400, 0)
+    tex_coord.location = (-600, 0)
 
-    links.new(tex_coord.outputs["UV"], tex.inputs["Vector"])
-    links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    # Color grid texture
+    grid_tex = nodes.new("ShaderNodeTexImage")
+    grid_tex.image = grid_img
+    grid_tex.location = (-350, 100)
+    links.new(tex_coord.outputs["UV"], grid_tex.inputs["Vector"])
+
+    # If no UV layout image, connect grid directly to BSDF
+    if uv_layout_img is None:
+        links.new(grid_tex.outputs["Color"], bsdf.inputs["Base Color"])
+        return mat
+
+    # UV layout texture (seam overlay)
+    seam_tex = nodes.new("ShaderNodeTexImage")
+    seam_tex.image = uv_layout_img
+    seam_tex.location = (-350, -150)
+    seam_tex.image.colorspace_settings.name = 'Non-Color'  # Prevent gamma correction
+    links.new(tex_coord.outputs["UV"], seam_tex.inputs["Vector"])
+
+    # MixRGB: blend grid with red using seam alpha as factor
+    # Handle Blender 3.x (ShaderNodeMixRGB) vs 4.x (ShaderNodeMix)
+    try:
+        mix = nodes.new("ShaderNodeMix")
+        mix.data_type = 'RGBA'
+        mix.blend_type = 'MIX'
+        mix.location = (-50, 0)
+        mix.inputs["B"].default_value = (1.0, 0.0, 0.0, 1.0)  # red
+        links.new(seam_tex.outputs["Alpha"], mix.inputs["Factor"])
+        links.new(grid_tex.outputs["Color"], mix.inputs["A"])
+        links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
+    except:
+        # Fallback to Blender 3.x API
+        mix = nodes.new("ShaderNodeMixRGB")
+        mix.blend_type = 'MIX'
+        mix.location = (-50, 0)
+        mix.inputs["Color2"].default_value = (1.0, 0.0, 0.0, 1.0)  # red
+        links.new(seam_tex.outputs["Alpha"], mix.inputs["Fac"])
+        links.new(grid_tex.outputs["Color"], mix.inputs["Color1"])
+        links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
 
     return mat
+
+
+def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
+    """Export each mesh's UV layout, composite into a grid PNG using numpy."""
+    import bpy, os, math, tempfile, shutil
+    import numpy as np
+
+    if not mesh_objects:
+        return
+
+    n = len(mesh_objects)
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    canvas_w = cols * cell_size
+    canvas_h = rows * cell_size
+
+    # numpy canvas: shape (canvas_h, canvas_w, 4), float32
+    canvas = np.ones((canvas_h, canvas_w, 4), dtype=np.float32)
+    canvas[:, :, 3] = 0.0  # transparent background
+
+    tmp_dir = tempfile.mkdtemp(prefix="uv_layout_")
+
+    for i, obj in enumerate(mesh_objects):
+        col = i % cols
+        row = i // cols
+
+        tmp_path = os.path.join(tmp_dir, f"uv_layout_{i:04d}.png")
+        success = export_uv_layout_for_mesh(obj, tmp_path, size=(cell_size, cell_size))
+        if not success:
+            continue
+
+        img = bpy.data.images.load(tmp_path, check_existing=False)
+        img.colorspace_settings.name = 'Non-Color'  # Prevent gamma correction
+        if img.size[0] != cell_size or img.size[1] != cell_size:
+            img.scale(cell_size, cell_size)
+
+        # img.pixels is bottom-left origin, shape: (h*w*4,) flat
+        src = np.array(img.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
+        bpy.data.images.remove(img)
+
+        # Place into canvas (Blender images are bottom-left origin)
+        y0 = row * cell_size
+        x0 = col * cell_size
+        canvas[y0:y0 + cell_size, x0:x0 + cell_size] = src
+
+    # Clean up temp files
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # Write canvas to Blender image and save
+    out_img = bpy.data.images.new(
+        "UV_Layout_Composite", width=canvas_w, height=canvas_h, alpha=True
+    )
+    out_img.pixels.foreach_set(canvas.ravel())  # Fast pixel assignment
+    out_img.save_render(output_path)
+    bpy.data.images.remove(out_img)
+
+    log(f"UV Checker: UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} meshes)")
 
 
 def create_checker_material(scale):
@@ -198,91 +367,125 @@ def create_checker_material(scale):
     return mat
 
 
-def apply_material_to_meshes(material):
-    import bpy
-
-    applied = 0
-    skipped = 0
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        if not obj.data.uv_layers:
-            skipped += 1
-            print(f"UV Checker: skipping '{obj.name}' (no UV map)")
-            continue
-        obj.data.materials.clear()
-        obj.data.materials.append(material)
-        applied += 1
-
-    print(f"UV Checker: applied to {applied} mesh(es), skipped {skipped}")
-    return applied
-
-
 def main() -> None:
-    import bpy
+    global _log_file
+    import bpy, os, tempfile, shutil
 
     separator_idx = sys.argv.index("--")
     config_json = sys.argv[separator_idx + 1]
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    import importlib.util, os
-    spec = importlib.util.spec_from_file_location(
-        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
-    rv = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rv)
+    # Open log file
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "render")
+    os.makedirs(output_dir, exist_ok=True)
+    log_path = os.path.join(output_dir, f"{base_name}_uv_checker.log")
+    _log_file = open(log_path, 'w', encoding='utf-8')
+    log(f"UV Checker: log file opened at {log_path}")
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        rv.import_model(bpy, glb_file)
-    else:
-        print("UV Checker: Warning - no glb_file specified in script_options")
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+        rv = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rv)
 
-    rv.normalize_model(bpy)
+        glb_file = opts.get("glb_file")
+        if glb_file:
+            rv.import_model(bpy, glb_file)
+        else:
+            log("UV Checker: Warning - no glb_file specified in script_options")
 
-    style = opts.get("style", "color_grid")
-    scale = opts.get("scale", 8.0)
+        rv.normalize_model(bpy)
 
-    if style == "checker":
-        material = create_checker_material(scale)
-    else:
-        material = create_color_grid_material()
+        style = opts.get("style", "color_grid")
+        scale = opts.get("scale", 8.0)
 
-    count = apply_material_to_meshes(material)
-    if count == 0:
-        print("UV Checker: no meshes with UVs found, rendering scene as-is")
+        mesh_objects = rv._get_model_mesh_objects(bpy)
+        uv_mesh_objects = [obj for obj in mesh_objects if obj.data.uv_layers]
 
-    scene = bpy.context.scene
-    render = scene.render
+        if style == "checker":
+            material = create_checker_material(scale)
+            for obj in uv_mesh_objects:
+                obj.data.materials.clear()
+                obj.data.materials.append(material)
+            log(f"UV Checker: applied checker material to {len(uv_mesh_objects)} mesh(es)")
+        else:
+            # Load color grid once
+            grid_img = load_color_grid_image()
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = rv.resolve_engine(engine)
-    render.resolution_x = config.get("resolution_x", 1920)
-    render.resolution_y = config.get("resolution_y", 1080)
-    render.resolution_percentage = config.get("resolution_percentage", 100)
+            if not uv_mesh_objects:
+                log("UV Checker: no meshes with UVs found, rendering scene as-is")
+            else:
+                tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
+                uv_layout_images = {}
 
-    fmt = config.get("output_format", "PNG")
-    render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
+                for i, obj in enumerate(uv_mesh_objects):
+                    seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
+                    success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024))
+                    if success:
+                        uv_img = bpy.data.images.load(seam_path, check_existing=False)
+                        uv_img.colorspace_settings.name = 'Non-Color'
+                        uv_layout_images[obj.name] = uv_img
 
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+                    mat = create_per_mesh_material(
+                        obj, grid_img, uv_layout_images.get(obj.name)
+                    )
+                    obj.data.materials.clear()
+                    obj.data.materials.append(mat)
 
-    # Set world background
-    rv.setup_white_world(scene)
+                log(f"UV Checker: applied per-mesh materials to {len(uv_mesh_objects)} mesh(es)")
 
-    mesh_objects = rv._get_model_mesh_objects(bpy)
-    if not mesh_objects:
-        print("UV Checker: no mesh objects found")
-        return
+        scene = bpy.context.scene
+        render = scene.render
 
-    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
-    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = rv.resolve_engine(engine)
+        render.resolution_x = config.get("resolution_x", 1920)
+        render.resolution_y = config.get("resolution_y", 1080)
+        render.resolution_percentage = config.get("resolution_percentage", 100)
 
-    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
+        fmt = config.get("output_format", "PNG")
+        render.image_settings.file_format = fmt
+        render.image_settings.color_mode = 'RGBA'
+        render.film_transparent = True
+
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
+
+        rv.setup_white_world(scene)
+
+        if not mesh_objects:
+            log("UV Checker: no mesh objects found")
+            return
+
+        center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+        rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+
+        rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
+
+        # Export UV layout composite after rendering
+        if style == "color_grid" and uv_mesh_objects:
+            uv_composite_path = os.path.join(output_dir, f"{base_name}_uv_layout.png")
+            export_uv_layout_composite(uv_mesh_objects, uv_composite_path, cell_size=512)
+
+            # Cleanup
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            for img in uv_layout_images.values():
+                bpy.data.images.remove(img)
+
+        log("UV Checker: completed successfully")
+    except Exception as e:
+        log(f"UV Checker: ERROR - {e}")
+        import traceback
+        log(traceback.format_exc())
+        raise
+    finally:
+        if _log_file:
+            _log_file.close()
 
 
 if __name__ == "__main__":
