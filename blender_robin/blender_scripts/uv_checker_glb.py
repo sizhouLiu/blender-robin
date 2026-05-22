@@ -328,40 +328,128 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
     return mat
 
 
-def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
-    """Export each mesh's UV layout, composite into a grid PNG using numpy.
+def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0)):
+    """Draw UV edges for a group of objects onto a single transparent canvas."""
+    import bpy, os, bmesh
+    import numpy as np
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+    width, height = size
+    canvas = np.zeros((height, width, 4), dtype=np.float32)
+    UV_EPS = 1e-5
+
+    for obj in objects:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+
+        if not bm.loops.layers.uv.active:
+            bm.free()
+            log(f"UV Checker: WARNING - '{obj.name}' has no active UV layer")
+            continue
+
+        uv_layer = bm.loops.layers.uv.active
+        uv_edges = []
+
+        if seams_only:
+            for edge in bm.edges:
+                if len(edge.link_faces) < 2:
+                    for face in edge.link_faces:
+                        for loop in face.loops:
+                            if loop.edge == edge:
+                                uv1 = loop[uv_layer].uv.copy()
+                                uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                                uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+                                break
+                else:
+                    side_uvs = []
+                    for face in edge.link_faces:
+                        for loop in face.loops:
+                            if loop.edge == edge:
+                                uv1 = loop[uv_layer].uv.copy()
+                                uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                                side_uvs.append((uv1, uv2))
+                                break
+                    if len(side_uvs) >= 2:
+                        u1a, u1b = side_uvs[0]
+                        is_seam = False
+                        for u2a, u2b in side_uvs[1:]:
+                            if ((abs(u1a.x - u2b.x) > UV_EPS or abs(u1a.y - u2b.y) > UV_EPS) or
+                                    (abs(u1b.x - u2a.x) > UV_EPS or abs(u1b.y - u2a.y) > UV_EPS)):
+                                is_seam = True
+                                break
+                        if is_seam:
+                            uv_edges.append((u1a.x, u1a.y, u1b.x, u1b.y))
+        else:
+            for face in bm.faces:
+                loops = face.loops
+                n = len(loops)
+                for i, loop in enumerate(loops):
+                    uv1 = loop[uv_layer].uv
+                    uv2 = loops[(i + 1) % n][uv_layer].uv
+                    uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+
+        bm.free()
+
+        if uv_edges:
+            arr = np.array(uv_edges, dtype=np.float32)
+            arr[:, [0, 2]] = np.clip(arr[:, [0, 2]] * width, 0, width - 1)
+            arr[:, [1, 3]] = np.clip((1.0 - arr[:, [1, 3]]) * height, 0, height - 1)
+            for x0, y0, x1, y1 in arr.astype(int):
+                _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color)
+
+    img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
+    img.pixels.foreach_set(canvas.ravel())
+    _save_render_standard(img, output_path)
+    bpy.data.images.remove(img)
+    return True
+
+
+def _group_objects_by_material(mesh_objects):
+    """Group mesh objects by their first material slot. Returns list of (label, [objects])."""
+    groups = {}
+    order = []
+    for obj in mesh_objects:
+        mat = obj.data.materials[0] if obj.data.materials else None
+        key = mat.name if mat else "__no_material__"
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(obj)
+    return [(k, groups[k]) for k in order]
+
+
+def export_uv_layout_composite_grouped(groups, output_path, cell_size=512):
+    """Export UV layout from pre-computed material groups into a grid PNG using numpy.
+    Objects sharing the same material are drawn together in one cell.
     Draws all UV edges in white, then overlays seams in red."""
     import bpy, os, math, tempfile, shutil
     import numpy as np
 
-    if not mesh_objects:
+    if not groups:
         return
 
-    n = len(mesh_objects)
+    n = len(groups)
     cols = math.ceil(math.sqrt(n))
     rows = math.ceil(n / cols)
     canvas_w = cols * cell_size
     canvas_h = rows * cell_size
 
-    # numpy canvas: shape (canvas_h, canvas_w, 4), float32
     canvas = np.ones((canvas_h, canvas_w, 4), dtype=np.float32)
     canvas[:, :, 3] = 0.0  # transparent background
 
     tmp_dir = tempfile.mkdtemp(prefix="uv_layout_")
 
-    for i, obj in enumerate(mesh_objects):
+    for i, (mat_name, objects) in enumerate(groups):
         col = i % cols
         row = i // cols
 
-        # Draw all UV edges in white (base layer)
         tmp_all = os.path.join(tmp_dir, f"uv_all_{i:04d}.png")
-        _bake_uv_image(obj, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0))
+        _bake_uv_image_group(objects, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0))
 
-        # Draw seams in red (overlay)
         tmp_seam = os.path.join(tmp_dir, f"uv_seam_{i:04d}.png")
-        _bake_uv_image(obj, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0))
+        _bake_uv_image_group(objects, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0))
 
-        # Load and composite both layers
         img_all = bpy.data.images.load(tmp_all, check_existing=False)
         img_all.colorspace_settings.name = 'Non-Color'
         src_all = np.array(img_all.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
@@ -372,27 +460,26 @@ def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
         src_seam = np.array(img_seam.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
         bpy.data.images.remove(img_seam)
 
-        # Alpha blend: seam over all edges
         alpha_seam = src_seam[:, :, 3:4]
         composite = src_all * (1 - alpha_seam) + src_seam * alpha_seam
 
-        # Place into canvas
         y0 = row * cell_size
         x0 = col * cell_size
         canvas[y0:y0 + cell_size, x0:x0 + cell_size] = composite
 
-    # Clean up temp files
     shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    # Write canvas to Blender image and save
     out_img = bpy.data.images.new(
         "UV_Layout_Composite", width=canvas_w, height=canvas_h, alpha=True
     )
-    out_img.pixels.foreach_set(canvas.ravel())  # Fast pixel assignment
+    out_img.pixels.foreach_set(canvas.ravel())
     _save_render_standard(out_img, output_path)
     bpy.data.images.remove(out_img)
 
-    log(f"UV Checker: UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} meshes)")
+    group_summary = ", ".join(
+        f"{name}({len(objs)} mesh{'es' if len(objs) > 1 else ''})" for name, objs in groups
+    )
+    log(f"UV Checker: UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} material group(s): {group_summary})")
 
 
 def create_checker_material(scale):
@@ -482,6 +569,11 @@ def main() -> None:
             if not uv_mesh_objects:
                 log("UV Checker: no meshes with UVs found, rendering scene as-is")
             else:
+                # Record original material grouping BEFORE replacing materials
+                original_material_groups = _group_objects_by_material(uv_mesh_objects)
+                log(f"UV Checker: {len(original_material_groups)} material group(s) detected: "
+                    + ", ".join(f"{k}({len(v)})" for k, v in original_material_groups))
+
                 tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
                 uv_layout_images = {}
 
@@ -546,7 +638,7 @@ def main() -> None:
         if style == "color_grid" and uv_mesh_objects and export_uv_layout:
             timer_start("uv_layout_composite")
             uv_composite_path = os.path.join(output_dir, f"{base_name}_uv_layout.png")
-            export_uv_layout_composite(uv_mesh_objects, uv_composite_path, cell_size=512)
+            export_uv_layout_composite_grouped(original_material_groups, uv_composite_path, cell_size=512)
             timer_end("uv_layout_composite")
 
         # Cleanup
