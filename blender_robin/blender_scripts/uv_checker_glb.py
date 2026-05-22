@@ -5,8 +5,10 @@ Invoked via: blender --background --python uv_checker_glb.py -- <json_config>
 """
 import json
 import sys
+import time
 
 _log_file = None
+_timers = {}
 
 
 def log(msg):
@@ -17,6 +19,16 @@ def log(msg):
             _log_file.flush()
         except Exception:
             pass
+
+
+def timer_start(name):
+    _timers[name] = time.time()
+
+
+def timer_end(name):
+    elapsed = time.time() - _timers.pop(name, time.time())
+    log(f"[timer] {name}: {elapsed:.2f}s")
+    return elapsed
 
 
 def load_color_grid_image():
@@ -35,11 +47,12 @@ def load_color_grid_image():
     return img
 
 
-def _bake_uv_image(obj, output_path, size, seams_only):
+def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0)):
     """
     Draw UV edges for obj onto a transparent canvas and save as PNG.
     seams_only=True: only edges where adjacent faces have different UV coords (seams).
     seams_only=False: all UV edges (island outlines + interior).
+    color: RGBA tuple for line color (default white).
     Returns True on success.
     """
     import bpy, os, bmesh
@@ -117,11 +130,11 @@ def _bake_uv_image(obj, output_path, size, seams_only):
         uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
 
         for x0, y0, x1, y1 in uv_edges.astype(int):
-            _draw_line_numpy(canvas, x0, y0, x1, y1, width, height)
+            _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
-    img.save_render(output_path)
+    _save_render_standard(img, output_path)
     bpy.data.images.remove(img)
     return True
 
@@ -175,11 +188,32 @@ def bake_seam_overlay_for_mesh(obj, output_path, size=(1024, 1024)):
     return success
 
 
-def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height):
-    """Draw a line on canvas using Bresenham algorithm (numpy vectorized)."""
+def _save_render_standard(img, output_path):
+    """Save image using Standard view transform to avoid AgX/Filmic color shift."""
+    import bpy
+    scene = bpy.context.scene
+    cm = scene.view_settings
+    prev_view = cm.view_transform
+    prev_look = cm.look
+    prev_exposure = cm.exposure
+    prev_gamma = cm.gamma
+    try:
+        cm.view_transform = 'Standard'
+        cm.look = 'None'
+        cm.exposure = 0.0
+        cm.gamma = 1.0
+        img.save_render(output_path)
+    finally:
+        cm.view_transform = prev_view
+        cm.look = prev_look
+        cm.exposure = prev_exposure
+        cm.gamma = prev_gamma
+
+
+def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3):
+    """Draw a line on canvas using Bresenham algorithm with configurable thickness."""
     import numpy as np
 
-    # Bresenham's line algorithm
     dx = abs(x1 - x0)
     dy = abs(y1 - y0)
     sx = 1 if x0 < x1 else -1
@@ -190,12 +224,9 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height):
     points = []
 
     while True:
-        if 0 <= x < width and 0 <= y < height:
-            points.append((y, x))
-
+        points.append((y, x))
         if x == x1 and y == y1:
             break
-
         e2 = 2 * err
         if e2 > -dy:
             err -= dy
@@ -204,10 +235,26 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height):
             err += dx
             y += sy
 
-    # Set pixels (white lines on transparent background)
-    if points:
-        points = np.array(points)
-        canvas[points[:, 0], points[:, 1]] = [1.0, 1.0, 1.0, 1.0]
+    if not points:
+        return
+
+    pts = np.array(points)  # shape (N, 2): col0=y, col1=x
+
+    if thickness > 1:
+        half = thickness // 2
+        offsets = np.arange(-half, half + 1)
+        # Expand perpendicular to the dominant direction
+        if dx >= dy:  # mostly horizontal → expand vertically
+            ys = (pts[:, 0:1] + offsets).ravel()
+            xs = np.repeat(pts[:, 1], thickness)
+        else:          # mostly vertical → expand horizontally
+            ys = np.repeat(pts[:, 0], thickness)
+            xs = (pts[:, 1:2] + offsets).ravel()
+        mask = (ys >= 0) & (ys < height) & (xs >= 0) & (xs < width)
+        canvas[ys[mask], xs[mask]] = color
+    else:
+        mask = (pts[:, 0] >= 0) & (pts[:, 0] < height) & (pts[:, 1] >= 0) & (pts[:, 1] < width)
+        canvas[pts[mask, 0], pts[mask, 1]] = color
 
 
 def create_per_mesh_material(obj, grid_img, uv_layout_img):
@@ -264,7 +311,7 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
         mix.data_type = 'RGBA'
         mix.blend_type = 'MIX'
         mix.location = (-50, 0)
-        mix.inputs["B"].default_value = (1.0, 0.0, 0.0, 1.0)  # red
+        mix.inputs["B"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
         links.new(seam_tex.outputs["Alpha"], mix.inputs["Factor"])
         links.new(grid_tex.outputs["Color"], mix.inputs["A"])
         links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
@@ -273,7 +320,7 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
         mix = nodes.new("ShaderNodeMixRGB")
         mix.blend_type = 'MIX'
         mix.location = (-50, 0)
-        mix.inputs["Color2"].default_value = (1.0, 0.0, 0.0, 1.0)  # red
+        mix.inputs["Color2"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
         links.new(seam_tex.outputs["Alpha"], mix.inputs["Fac"])
         links.new(grid_tex.outputs["Color"], mix.inputs["Color1"])
         links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
@@ -282,7 +329,8 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
 
 
 def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
-    """Export each mesh's UV layout, composite into a grid PNG using numpy."""
+    """Export each mesh's UV layout, composite into a grid PNG using numpy.
+    Draws all UV edges in white, then overlays seams in red."""
     import bpy, os, math, tempfile, shutil
     import numpy as np
 
@@ -305,24 +353,33 @@ def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
         col = i % cols
         row = i // cols
 
-        tmp_path = os.path.join(tmp_dir, f"uv_layout_{i:04d}.png")
-        success = export_uv_layout_for_mesh(obj, tmp_path, size=(cell_size, cell_size))
-        if not success:
-            continue
+        # Draw all UV edges in white (base layer)
+        tmp_all = os.path.join(tmp_dir, f"uv_all_{i:04d}.png")
+        _bake_uv_image(obj, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0))
 
-        img = bpy.data.images.load(tmp_path, check_existing=False)
-        img.colorspace_settings.name = 'Non-Color'  # Prevent gamma correction
-        if img.size[0] != cell_size or img.size[1] != cell_size:
-            img.scale(cell_size, cell_size)
+        # Draw seams in red (overlay)
+        tmp_seam = os.path.join(tmp_dir, f"uv_seam_{i:04d}.png")
+        _bake_uv_image(obj, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0))
 
-        # img.pixels is bottom-left origin, shape: (h*w*4,) flat
-        src = np.array(img.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
-        bpy.data.images.remove(img)
+        # Load and composite both layers
+        img_all = bpy.data.images.load(tmp_all, check_existing=False)
+        img_all.colorspace_settings.name = 'Non-Color'
+        src_all = np.array(img_all.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
+        bpy.data.images.remove(img_all)
 
-        # Place into canvas (Blender images are bottom-left origin)
+        img_seam = bpy.data.images.load(tmp_seam, check_existing=False)
+        img_seam.colorspace_settings.name = 'Non-Color'
+        src_seam = np.array(img_seam.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
+        bpy.data.images.remove(img_seam)
+
+        # Alpha blend: seam over all edges
+        alpha_seam = src_seam[:, :, 3:4]
+        composite = src_all * (1 - alpha_seam) + src_seam * alpha_seam
+
+        # Place into canvas
         y0 = row * cell_size
         x0 = col * cell_size
-        canvas[y0:y0 + cell_size, x0:x0 + cell_size] = src
+        canvas[y0:y0 + cell_size, x0:x0 + cell_size] = composite
 
     # Clean up temp files
     shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -332,7 +389,7 @@ def export_uv_layout_composite(mesh_objects, output_path, cell_size=512):
         "UV_Layout_Composite", width=canvas_w, height=canvas_h, alpha=True
     )
     out_img.pixels.foreach_set(canvas.ravel())  # Fast pixel assignment
-    out_img.save_render(output_path)
+    _save_render_standard(out_img, output_path)
     bpy.data.images.remove(out_img)
 
     log(f"UV Checker: UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} meshes)")
@@ -385,22 +442,29 @@ def main() -> None:
     log(f"UV Checker: log file opened at {log_path}")
 
     try:
+        timer_start("total")
+
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
         rv = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(rv)
 
+        timer_start("import_model")
         glb_file = opts.get("glb_file")
         if glb_file:
             rv.import_model(bpy, glb_file)
         else:
             log("UV Checker: Warning - no glb_file specified in script_options")
+        timer_end("import_model")
 
         rv.normalize_model(bpy)
 
         style = opts.get("style", "color_grid")
         scale = opts.get("scale", 8.0)
+        enable_seam_overlay = opts.get("enable_seam_overlay", True)
+        export_uv_layout = opts.get("export_uv_layout", True)
+        log(f"UV Checker: style={style}, enable_seam_overlay={enable_seam_overlay}, export_uv_layout={export_uv_layout}")
 
         mesh_objects = rv._get_model_mesh_objects(bpy)
         uv_mesh_objects = [obj for obj in mesh_objects if obj.data.uv_layers]
@@ -421,14 +485,18 @@ def main() -> None:
                 tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
                 uv_layout_images = {}
 
-                for i, obj in enumerate(uv_mesh_objects):
-                    seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
-                    success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024))
-                    if success:
-                        uv_img = bpy.data.images.load(seam_path, check_existing=False)
-                        uv_img.colorspace_settings.name = 'Non-Color'
-                        uv_layout_images[obj.name] = uv_img
+                if enable_seam_overlay:
+                    timer_start("bake_seams")
+                    for i, obj in enumerate(uv_mesh_objects):
+                        seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
+                        success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024))
+                        if success:
+                            uv_img = bpy.data.images.load(seam_path, check_existing=False)
+                            uv_img.colorspace_settings.name = 'Non-Color'
+                            uv_layout_images[obj.name] = uv_img
+                    timer_end("bake_seams")
 
+                for obj in uv_mesh_objects:
                     mat = create_per_mesh_material(
                         obj, grid_img, uv_layout_images.get(obj.name)
                     )
@@ -458,6 +526,11 @@ def main() -> None:
 
         rv.setup_white_world(scene)
 
+        # Use Standard view transform so seam red renders as true red (not AgX/Filmic shifted)
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+        log("UV Checker: view transform set to Standard")
+
         if not mesh_objects:
             log("UV Checker: no mesh objects found")
             return
@@ -465,18 +538,24 @@ def main() -> None:
         center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
         rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
+        timer_start("render")
         rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
+        timer_end("render")
 
         # Export UV layout composite after rendering
-        if style == "color_grid" and uv_mesh_objects:
+        if style == "color_grid" and uv_mesh_objects and export_uv_layout:
+            timer_start("uv_layout_composite")
             uv_composite_path = os.path.join(output_dir, f"{base_name}_uv_layout.png")
             export_uv_layout_composite(uv_mesh_objects, uv_composite_path, cell_size=512)
+            timer_end("uv_layout_composite")
 
-            # Cleanup
+        # Cleanup
+        if style == "color_grid" and uv_mesh_objects:
             shutil.rmtree(tmp_dir, ignore_errors=True)
             for img in uv_layout_images.values():
                 bpy.data.images.remove(img)
 
+        timer_end("total")
         log("UV Checker: completed successfully")
     except Exception as e:
         log(f"UV Checker: ERROR - {e}")

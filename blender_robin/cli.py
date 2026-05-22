@@ -227,13 +227,16 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
 @click.option("--style", type=click.Choice(["color_grid", "checker"], case_sensitive=False),
               default="color_grid", help="UV checker pattern style.")
 @click.option("--scale", type=float, default=8.0, help="Checker scale (only for 'checker' style).")
+@click.option("--seam-overlay/--no-seam-overlay", default=True, help="Overlay red seam lines on the render.")
+@click.option("--uv-layout/--no-uv-layout", default=True, help="Export UV layout composite image.")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-             style: str, scale: float, views: str | None, closeup_count: int, no_composite: bool,
+             style: str, scale: float, seam_overlay: bool, uv_layout: bool,
+             views: str | None, closeup_count: int, no_composite: bool,
              delete_views: bool, delete_closeups: bool, camera_json: str | None, hdri: str | None, env_texture: str | None,
              export_metadata: bool, animation_frame: int | None, output_format: str,
              pattern: str, parallel: int, dry_run: bool) -> None:
@@ -266,6 +269,10 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
                 run_id=ctx.obj["run_id"],
                 delete_closeups=delete_closeups,
                 camera_json=camera_json,
+                style=style,
+                scale=scale,
+                enable_seam_overlay=seam_overlay,
+                export_uv_layout=uv_layout,
             ),
         )
         configs.append(cfg)

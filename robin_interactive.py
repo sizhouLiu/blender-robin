@@ -259,6 +259,10 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
         args += ["--camera-json", camera_json]
     if command == "uv-check":
         args += ["--style", cfg.get("uv_style", "color_grid")]
+        if not cfg.get("enable_seam_overlay", True):
+            args.append("--no-seam-overlay")
+        if not cfg.get("export_uv_layout", True):
+            args.append("--no-uv-layout")
     if command == "wireframe":
         args += ["--mode", wireframe_mode]
     try:
@@ -283,6 +287,8 @@ def edit_config(cfg):
             (f"删除特写图: {'是' if cfg.get('delete_closeups', False) else '否'}", "delete_closeups"),
             (f"并行渲染数: {cfg.get('parallel', 1)}", "parallel"),
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
+            (f"接缝叠加: {'是' if cfg.get('enable_seam_overlay', True) else '否'}", "enable_seam_overlay"),
+            (f"导出 UV Layout: {'是' if cfg.get('export_uv_layout', True) else '否'}", "export_uv_layout"),
             (f"线框模式: {cfg.get('wireframe_mode', 'clay')}", "wireframe_mode"),
             (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
@@ -379,6 +385,14 @@ def edit_config(cfg):
             new = "checker" if cur == "color_grid" else "color_grid"
             cfg["uv_style"] = new
             print(f"\n  {GREEN}已切换为: {new}{RESET}\n")
+
+        elif key == "enable_seam_overlay":
+            cfg["enable_seam_overlay"] = not cfg.get("enable_seam_overlay", True)
+            print(f"\n  {GREEN}接缝叠加: {'已开启' if cfg['enable_seam_overlay'] else '已关闭'}{RESET}\n")
+
+        elif key == "export_uv_layout":
+            cfg["export_uv_layout"] = not cfg.get("export_uv_layout", True)
+            print(f"\n  {GREEN}导出 UV Layout: {'已开启' if cfg['export_uv_layout'] else '已关闭'}{RESET}\n")
 
         elif key == "wireframe_mode":
             modes = ["clay", "normal", "face_normal", "material"]
