@@ -13,7 +13,7 @@
   ],
   "closeup_count": 4,
   "composite": false,
-  "uv_style": "color_grid",
+  "uv_style": "checker",
   "delete_views": false,
   "export_metadata": false,
   "output_format": "PNG",

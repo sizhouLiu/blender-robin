@@ -6,6 +6,60 @@ import json
 import math
 import os
 import random
+import time
+
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+_log_file = None
+_log_enabled = True
+_timers = {}
+
+
+def open_log(output_dir, base_name, script_label):
+    """Open a per-render log file. No-op if logging is disabled."""
+    global _log_file, _log_enabled
+    if not _log_enabled:
+        return
+    os.makedirs(output_dir, exist_ok=True)
+    log_path = os.path.join(output_dir, f"{base_name}_{script_label}.log")
+    _log_file = open(log_path, 'w', encoding='utf-8')
+    log(f"{script_label}: log opened at {log_path}")
+
+
+def close_log():
+    global _log_file
+    if _log_file:
+        try:
+            _log_file.close()
+        except Exception:
+            pass
+        _log_file = None
+
+
+def log(msg):
+    print(msg, flush=True)
+    if _log_file:
+        try:
+            _log_file.write(msg + "\n")
+            _log_file.flush()
+        except Exception:
+            pass
+
+
+def configure_log(enabled):
+    global _log_enabled
+    _log_enabled = enabled
+
+
+def timer_start(name):
+    _timers[name] = time.time()
+
+
+def timer_end(name):
+    elapsed = time.time() - _timers.pop(name, time.time())
+    log(f"[timer] {name}: {elapsed:.2f}s")
+    return elapsed
 
 
 # ── HDRI environment lighting ─────────────────────────────────────────────
@@ -62,9 +116,9 @@ def setup_hdri_world(hdri_path: str, env_texture: str = None):
     if os.path.exists(full_path):
         bpy.ops.image.open(filepath=full_path)
         env_node.image = bpy.data.images.get(env_texture)
-        print(f"HDRI: loaded {env_texture}")
+        log(f"HDRI: loaded {env_texture}")
     else:
-        print(f"HDRI: {full_path} not found, using flat gray fallback")
+        log(f"HDRI: {full_path} not found, using flat gray fallback")
         bg_node.inputs["Color"].default_value = (0.5, 0.5, 0.5, 1.0)
         bg_node.inputs["Strength"].default_value = 1.0
 
@@ -94,10 +148,10 @@ def import_model(bpy, filepath):
         for obj in data_to.objects:
             if obj is not None:
                 bpy.context.collection.objects.link(obj)
-        print(f"Import: loaded .blend file {filepath} ({len(data_to.objects)} objects)")
+        log(f"Import: loaded .blend file {filepath} ({len(data_to.objects)} objects)")
     else:
         bpy.ops.import_scene.gltf(filepath=filepath)
-        print(f"Import: loaded {filepath}")
+        log(f"Import: loaded {filepath}")
 
 
 def _get_model_mesh_objects(bpy):
@@ -133,7 +187,7 @@ def normalize_model(bpy, target_size=2.0):
     depsgraph = bpy.context.evaluated_depsgraph_get()
     mesh_objects = _get_model_mesh_objects(bpy)
     if not mesh_objects:
-        print("Normalize: no mesh objects found")
+        log("Normalize: no mesh objects found")
         return
 
     min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
@@ -160,7 +214,7 @@ def normalize_model(bpy, target_size=2.0):
     max_dim = max(bbox_size.x, bbox_size.y, bbox_size.z)
 
     if max_dim == 0:
-        print("Normalize: model has zero size, skipping")
+        log("Normalize: model has zero size, skipping")
         return
 
     scale_factor = target_size / max_dim
@@ -176,7 +230,7 @@ def normalize_model(bpy, target_size=2.0):
     depsgraph = bpy.context.evaluated_depsgraph_get()
     depsgraph.update()
 
-    print(f"Normalize: centered and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
+    log(f"Normalize: centered and scaled by {scale_factor:.4f} (max_dim {max_dim:.4f} -> {target_size:.4f})")
 
 
 def get_bounding_box_evaluated(bpy, mesh_objects):
@@ -212,7 +266,7 @@ def get_bounding_box_evaluated(bpy, mesh_objects):
 
     center = (min_co + max_co) / 2
     bbox_size = max_co - min_co
-    print(f"BBox: center=({center.x:.4f}, {center.y:.4f}, {center.z:.4f}), "
+    log(f"BBox: center=({center.x:.4f}, {center.y:.4f}, {center.z:.4f}), "
           f"size=({bbox_size.x:.4f}, {bbox_size.y:.4f}, {bbox_size.z:.4f})")
     return center, bbox_size
 
@@ -331,7 +385,7 @@ def export_metadata(output_dir, camera_angle_x, camera_lens, sensor_width, env_t
     meta_path = os.path.join(output_dir, "meta.json")
     with open(meta_path, "w") as f:
         json.dump(out_data, f, indent=2)
-    print(f"Metadata: exported to {meta_path}")
+    log(f"Metadata: exported to {meta_path}")
 
 
 # ── Multi-view rendering ─────────────────────────────────────────────────
@@ -364,7 +418,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     mesh_objects = _get_model_mesh_objects(bpy)
     if mesh_objects:
         center, bbox_size = get_bounding_box_evaluated(bpy, mesh_objects)
-        print(f"{label}: Recomputed bbox at frame {animation_frame}")
+        log(f"{label}: Recomputed bbox at frame {animation_frame}")
 
     camera = scene.camera
     if not camera:
@@ -436,7 +490,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 render.filepath = filepath
                 bpy.ops.render.render(write_still=True)
                 view_files.append(f"{base_name}{fv_suffix}")
-                print(f"{label}: fixed_4view #{fixed_view_idx} rendered to {filepath}")
+                log(f"{label}: fixed_4view #{fixed_view_idx} rendered to {filepath}")
 
             # Skip other per-view logic — fixed_4view handles its own sub-views
             continue
@@ -461,7 +515,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         render.filepath = filepath
         bpy.ops.render.render(write_still=True)
         view_files.append(f"{base_name}{suffix}")
-        print(f"{label}: {view_name} rendered to {filepath}")
+        log(f"{label}: {view_name} rendered to {filepath}")
 
     # --- Random closeups ---
     if closeup_count > 0:
@@ -486,11 +540,11 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                     n = min(len(cached_points), len(cached_dirs), closeup_count)
                     chosen_points = [mathutils.Vector(p) for p in cached_points[:n]]
                     chosen_directions = [mathutils.Vector(d) for d in cached_dirs[:n]]
-                    print(f"{label}: Loaded {n} closeup positions from {ref_camera_json}")
+                    log(f"{label}: Loaded {n} closeup positions from {ref_camera_json}")
                 else:
-                    print(f"{label}: camera_json has {len(cached_points)} points but need {closeup_count}, ignoring")
+                    log(f"{label}: camera_json has {len(cached_points)} points but need {closeup_count}, ignoring")
             except Exception as e:
-                print(f"{label}: Failed to load camera_json {ref_camera_json}: {e}")
+                log(f"{label}: Failed to load camera_json {ref_camera_json}: {e}")
 
         if len(chosen_points) != closeup_count:
             verts_world = []
@@ -611,9 +665,9 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 camera_cache_path = f"{output_dir}/{base_name}{cache_suffix}_cameras.json"
                 with open(camera_cache_path, "w") as f:
                     json.dump(cache_data, f, indent=2)
-                print(f"{label}: Saved {len(chosen_points)} closeup positions to {camera_cache_path}")
+                log(f"{label}: Saved {len(chosen_points)} closeup positions to {camera_cache_path}")
             except Exception as e:
-                print(f"{label}: Failed to save camera cache: {e}")
+                log(f"{label}: Failed to save camera cache: {e}")
 
         cam_data.type = 'PERSP'
         for ci in range(closeup_count):
@@ -664,7 +718,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 safety_margin = max_dim * 0.05
                 cam_pos = cam_pos + direction * (extra_dist + safety_margin)
                 dist = (cam_pos - focus_point).length
-                print(f"{label}: closeup {ci + 1} camera was inside bbox, pushed out by {extra_dist + safety_margin:.3f}")
+                log(f"{label}: closeup {ci + 1} camera was inside bbox, pushed out by {extra_dist + safety_margin:.3f}")
 
             camera.location = cam_pos
             look_dir = focus_point - camera.location
@@ -677,7 +731,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             render.filepath = filepath
             bpy.ops.render.render(write_still=True)
             closeup_files.append(f"{base_name}{closeup_suffix}")
-            print(f"{label}: closeup {ci + 1} rendered to {filepath}")
+            log(f"{label}: closeup {ci + 1} rendered to {filepath}")
 
     # --- Composite ---
     def _make_composite(bpy, files, out_path, w, h, cols, label_tag):
@@ -703,7 +757,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
         canvas.file_format = 'PNG'
         canvas.save_render(out_path)
         bpy.data.images.remove(canvas)
-        print(f"{label}: composite saved to {out_path}")
+        log(f"{label}: composite saved to {out_path}")
 
     def _best_cols(n, img_w, img_h):
         """Return column count that makes the composite canvas closest to square."""
@@ -739,7 +793,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 p = f"{output_dir}/{fname}{ext}"
                 if os.path.exists(p):
                     os.remove(p)
-                    print(f"{label}: deleted view {fname}{ext}")
+                    log(f"{label}: deleted view {fname}{ext}")
 
         if delete_closeups_after_composite:
             import os
@@ -748,7 +802,7 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
                 p = f"{output_dir}/{fname}{ext}"
                 if os.path.exists(p):
                     os.remove(p)
-                    print(f"{label}: deleted closeup {fname}{ext}")
+                    log(f"{label}: deleted closeup {fname}{ext}")
 
     # --- Metadata ---
     if export_meta and meta_locations:

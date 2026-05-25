@@ -10,17 +10,7 @@ import math
 import sys
 
 
-def import_glb(filepath):
-    import bpy
-
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete(use_global=False)
-
-    bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"Albedo: imported {filepath}")
-
-
-def setup_albedo_compositor(output_dir, base_name):
+def setup_albedo_compositor(output_dir, base_name, log=print):
     """Enable DiffCol pass and output albedo via compositor."""
     import bpy
 
@@ -54,7 +44,7 @@ def setup_albedo_compositor(output_dir, base_name):
     composite.location = (600, 0)
     tree.links.new(alpha_node.outputs["Image"], composite.inputs["Image"])
 
-    print("Albedo: compositor set up for DiffCol pass")
+    log("Albedo: compositor set up for DiffCol pass")
 
 
 def main() -> None:
@@ -71,55 +61,61 @@ def main() -> None:
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        rv.import_model(bpy, glb_file)
-    else:
-        print("Albedo: Warning - no glb_file specified")
-        return
-
-    rv.normalize_model(bpy)
-
-    scene = bpy.context.scene
-    render = scene.render
-
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = rv.resolve_engine(engine)
-    render.resolution_x = config.get("resolution_x", 1920)
-    render.resolution_y = config.get("resolution_y", 1080)
-    render.resolution_percentage = config.get("resolution_percentage", 100)
-
-    fmt = config.get("output_format", "PNG")
-    render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
-
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
-
-    # HDR environment (for accurate GI influence on diffuse, though albedo ignores direct lighting)
-    hdri_path = opts.get("hdri_path")
-    env_texture = opts.get("env_texture")
-    if hdri_path:
-        rv.setup_hdri_world(hdri_path, env_texture)
-    else:
-        rv.setup_white_world(scene)
-
-    mesh_objects = rv._get_model_mesh_objects(bpy)
-    if not mesh_objects:
-        print("Albedo: no mesh objects found")
-        return
-
-    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
-    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
-
+    rv.configure_log(config.get("enable_log", True))
     output_dir = config.get("output_dir", "./output")
-    base_name = config.get("filename_pattern", "albedo")
-    setup_albedo_compositor(output_dir, base_name)
+    base_name = config.get("filename_pattern", "render")
+    rv.open_log(output_dir, base_name, "albedo")
 
-    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Albedo")
+    try:
+        glb_file = opts.get("glb_file")
+        if glb_file:
+            rv.import_model(bpy, glb_file)
+        else:
+            rv.log("Albedo: Warning - no glb_file specified")
+            return
+
+        rv.normalize_model(bpy)
+
+        scene = bpy.context.scene
+        render = scene.render
+
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = rv.resolve_engine(engine)
+        render.resolution_x = config.get("resolution_x", 1920)
+        render.resolution_y = config.get("resolution_y", 1080)
+        render.resolution_percentage = config.get("resolution_percentage", 100)
+
+        fmt = config.get("output_format", "PNG")
+        render.image_settings.file_format = fmt
+        render.image_settings.color_mode = 'RGBA'
+        render.film_transparent = True
+
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
+
+        # HDR environment (for accurate GI influence on diffuse, though albedo ignores direct lighting)
+        hdri_path = opts.get("hdri_path")
+        env_texture = opts.get("env_texture")
+        if hdri_path:
+            rv.setup_hdri_world(hdri_path, env_texture)
+        else:
+            rv.setup_white_world(scene)
+
+        mesh_objects = rv._get_model_mesh_objects(bpy)
+        if not mesh_objects:
+            rv.log("Albedo: no mesh objects found")
+            return
+
+        center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+        rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+
+        setup_albedo_compositor(output_dir, base_name, log=rv.log)
+
+        rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Albedo")
+    finally:
+        rv.close_log()
 
 
 if __name__ == "__main__":

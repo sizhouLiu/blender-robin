@@ -59,7 +59,7 @@ def create_wireframe_material(wire_size=1.5):
     return mat
 
 
-def apply_material_to_meshes(material):
+def apply_material_to_meshes(material, log=print):
     import bpy
 
     applied = 0
@@ -70,11 +70,11 @@ def apply_material_to_meshes(material):
         obj.data.materials.append(material)
         applied += 1
 
-    print(f"Wireframe: applied material to {applied} mesh(es)")
+    log(f"Wireframe: applied material to {applied} mesh(es)")
     return applied
 
 
-def apply_flat_shading():
+def apply_flat_shading(log=print):
     """Apply flat shading to all mesh objects."""
     import bpy
 
@@ -84,7 +84,7 @@ def apply_flat_shading():
                 poly.use_smooth = False
             obj.data.update()
 
-    print("Wireframe: applied flat shading")
+    log("Wireframe: applied flat shading")
 
 
 def _load_matcap_image(bpy, matcap_name):
@@ -100,10 +100,8 @@ def _load_matcap_image(bpy, matcap_name):
         if matcap_name in files:
             path = os.path.join(root, matcap_name)
             img = bpy.data.images.load(path)
-            print(f"Wireframe: Loaded MatCap from {path}")
             return img
 
-    print(f"Wireframe: MatCap '{matcap_name}' not found in Blender installation")
     return None
 
 
@@ -278,7 +276,7 @@ def create_matcap_wireframe_material(wire_size=1.5, matcap_name="basic_1.exr"):
     return mat
 
 
-def setup_workbench_wireframe(opts, matcap_name=None):
+def setup_workbench_wireframe(opts, matcap_name=None, log=print):
     """Configure Workbench engine with model + wireframe overlay."""
     import bpy
 
@@ -288,27 +286,24 @@ def setup_workbench_wireframe(opts, matcap_name=None):
     shading = scene.display.shading
 
     if matcap_name:
-        # Use MatCap shading (for clay/normal modes)
         shading.light = 'MATCAP'
         shading.color_type = 'MATERIAL'
         try:
             shading.studio_light = matcap_name
-            print(f"Wireframe: Using MatCap {matcap_name}")
+            log(f"Wireframe: Using MatCap {matcap_name}")
         except Exception:
-            print(f"Wireframe: MatCap '{matcap_name}' not found, using default")
+            log(f"Wireframe: MatCap '{matcap_name}' not found, using default")
     else:
-        # Use solid color shading (for basic wireframe)
         shading.light = 'STUDIO'
         shading.color_type = 'SINGLE'
         shading.single_color = (0.9, 0.9, 0.9)
 
-    # Enable wireframe overlay
     shading.show_xray_wireframe = True
-    shading.xray_alpha_wireframe = 0.0  # Opaque wireframe
+    shading.xray_alpha_wireframe = 0.0
 
     scene.render.film_transparent = True
 
-    print("Wireframe: Workbench engine configured with wireframe overlay")
+    log("Wireframe: Workbench engine configured with wireframe overlay")
 
 
 def main() -> None:
@@ -325,68 +320,72 @@ def main() -> None:
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        rv.import_model(bpy, glb_file)
-    else:
-        print("Wireframe: Warning - no glb_file specified")
-        return
+    rv.configure_log(config.get("enable_log", True))
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "render")
+    rv.open_log(output_dir, base_name, "wireframe")
 
-    rv.normalize_model(bpy)
+    try:
+        glb_file = opts.get("glb_file")
+        if glb_file:
+            rv.import_model(bpy, glb_file)
+        else:
+            rv.log("Wireframe: Warning - no glb_file specified")
+            return
 
-    scene = bpy.context.scene
-    render = scene.render
+        rv.normalize_model(bpy)
 
-    render.resolution_x = config.get("resolution_x", 1920)
-    render.resolution_y = config.get("resolution_y", 1080)
-    render.resolution_percentage = config.get("resolution_percentage", 100)
+        scene = bpy.context.scene
+        render = scene.render
 
-    fmt = config.get("output_format", "PNG")
-    render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
+        render.resolution_x = config.get("resolution_x", 1920)
+        render.resolution_y = config.get("resolution_y", 1080)
+        render.resolution_percentage = config.get("resolution_percentage", 100)
 
-    wireframe_mode = opts.get("wireframe_mode", "material")
-    wire_size = opts.get("wire_size", 1.5)
+        fmt = config.get("output_format", "PNG")
+        render.image_settings.file_format = fmt
+        render.image_settings.color_mode = 'RGBA'
+        render.film_transparent = True
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = rv.resolve_engine(engine)
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+        wireframe_mode = opts.get("wireframe_mode", "material")
+        wire_size = opts.get("wire_size", 1.5)
 
-    if wireframe_mode == "clay":
-        # EEVEE: basic_1.exr MatCap + black wireframe
-        apply_flat_shading()
-        material = create_matcap_wireframe_material(wire_size, matcap_name="basic_1.exr")
-        apply_material_to_meshes(material)
-    elif wireframe_mode == "normal":
-        # EEVEE: check_normal+y.exr MatCap + black wireframe
-        apply_flat_shading()
-        material = create_matcap_wireframe_material(wire_size, matcap_name="check_normal+y.exr")
-        apply_material_to_meshes(material)
-    elif wireframe_mode == "face_normal":
-        # EEVEE: world-space normal colors + black wireframe
-        apply_flat_shading()
-        material = create_face_normal_wireframe_material(wire_size)
-        apply_material_to_meshes(material)
-    else:
-        # material mode: white clay + shader wireframe
-        material = create_wireframe_material(wire_size)
-        apply_material_to_meshes(material)
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = rv.resolve_engine(engine)
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
 
-    rv.setup_white_world(scene)
+        if wireframe_mode == "clay":
+            apply_flat_shading(log=rv.log)
+            material = create_matcap_wireframe_material(wire_size, matcap_name="basic_1.exr")
+            apply_material_to_meshes(material, log=rv.log)
+        elif wireframe_mode == "normal":
+            apply_flat_shading(log=rv.log)
+            material = create_matcap_wireframe_material(wire_size, matcap_name="check_normal+y.exr")
+            apply_material_to_meshes(material, log=rv.log)
+        elif wireframe_mode == "face_normal":
+            apply_flat_shading(log=rv.log)
+            material = create_face_normal_wireframe_material(wire_size)
+            apply_material_to_meshes(material, log=rv.log)
+        else:
+            material = create_wireframe_material(wire_size)
+            apply_material_to_meshes(material, log=rv.log)
 
-    mesh_objects = rv._get_model_mesh_objects(bpy)
-    if not mesh_objects:
-        print("Wireframe: no mesh objects found")
-        return
+        rv.setup_white_world(scene)
 
-    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
-    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+        mesh_objects = rv._get_model_mesh_objects(bpy)
+        if not mesh_objects:
+            rv.log("Wireframe: no mesh objects found")
+            return
 
-    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Wireframe")
+        center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+        rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+
+        rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Wireframe")
+    finally:
+        rv.close_log()
 
 
 if __name__ == "__main__":

@@ -9,16 +9,6 @@ import random
 import sys
 
 
-def import_glb(filepath):
-    import bpy
-
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete(use_global=False)
-
-    bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"RGB Closeup: imported {filepath}")
-
-
 def ensure_camera(scene):
     import bpy
 
@@ -72,7 +62,7 @@ def frame_camera_on_bbox(camera, center, bbox_size, resolution_x, resolution_y):
     return distance
 
 
-def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
+def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y, log=print):
     """Frame a specific part's bounding box, same logic as full-body but tighter."""
     import mathutils
 
@@ -99,7 +89,7 @@ def setup_closeup_camera(camera, center, bbox_size, resolution_x, resolution_y):
     cam_data.clip_start = max(0.001, distance * 0.01)
     cam_data.clip_end = distance * 5
 
-    print(f"RGB Closeup: part closeup, bbox size {bbox_size.length:.2f}, distance {distance:.2f}")
+    log(f"RGB Closeup: part closeup, bbox size {bbox_size.length:.2f}, distance {distance:.2f}")
 
 
 def main() -> None:
@@ -116,56 +106,64 @@ def main() -> None:
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        rv.import_model(bpy, glb_file)
-    else:
-        print("RGB Closeup: Warning - no glb_file specified")
-        return
+    rv.configure_log(config.get("enable_log", True))
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "render")
+    rv.open_log(output_dir, base_name, "rgb")
 
-    rv.normalize_model(bpy)
+    try:
+        glb_file = opts.get("glb_file")
+        if glb_file:
+            rv.import_model(bpy, glb_file)
+        else:
+            rv.log("RGB Closeup: Warning - no glb_file specified")
+            return
 
-    scene = bpy.context.scene
-    render = scene.render
+        rv.normalize_model(bpy)
 
-    engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-    render.engine = rv.resolve_engine(engine)
-    render.resolution_x = config.get("resolution_x", 1920)
-    render.resolution_y = config.get("resolution_y", 1080)
-    render.resolution_percentage = config.get("resolution_percentage", 100)
+        scene = bpy.context.scene
+        render = scene.render
 
-    fmt = config.get("output_format", "PNG")
-    render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
+        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+        render.engine = rv.resolve_engine(engine)
+        render.resolution_x = config.get("resolution_x", 1920)
+        render.resolution_y = config.get("resolution_y", 1080)
+        render.resolution_percentage = config.get("resolution_percentage", 100)
 
-    if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-        samples = config.get("samples")
-        if samples is not None:
-            scene.eevee.taa_render_samples = samples
+        fmt = config.get("output_format", "PNG")
+        render.image_settings.file_format = fmt
+        render.image_settings.color_mode = 'RGBA'
+        render.film_transparent = True
 
-    hdri_path = opts.get("hdri_path")
-    env_texture = opts.get("env_texture")
-    if hdri_path:
-        rv.setup_hdri_world(hdri_path, env_texture)
-    else:
-        rv.setup_white_world(scene)
+        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+            samples = config.get("samples")
+            if samples is not None:
+                scene.eevee.taa_render_samples = samples
 
-    mesh_objects = rv._get_model_mesh_objects(bpy)
-    if not mesh_objects:
-        print("RGB Closeup: no mesh objects found")
-        return
+        hdri_path = opts.get("hdri_path")
+        env_texture = opts.get("env_texture")
+        if hdri_path:
+            rv.setup_hdri_world(hdri_path, env_texture)
+        else:
+            rv.setup_white_world(scene)
 
-    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+        mesh_objects = rv._get_model_mesh_objects(bpy)
+        if not mesh_objects:
+            rv.log("RGB Closeup: no mesh objects found")
+            return
 
-    camera = ensure_camera(scene)
+        center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
 
-    def _setup_cam(sc, c, bs, rx, ry):
-        cam = ensure_camera(sc)
-        frame_camera_on_bbox(cam, c, bs, rx, ry)
-        return cam
+        ensure_camera(scene)
 
-    rv.render_multi_view(bpy, scene, _setup_cam, center, bbox_size, opts, config, "RGB")
+        def _setup_cam(sc, c, bs, rx, ry):
+            cam = ensure_camera(sc)
+            frame_camera_on_bbox(cam, c, bs, rx, ry)
+            return cam
+
+        rv.render_multi_view(bpy, scene, _setup_cam, center, bbox_size, opts, config, "RGB")
+    finally:
+        rv.close_log()
 
 
 if __name__ == "__main__":

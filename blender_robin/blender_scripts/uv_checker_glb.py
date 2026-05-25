@@ -5,33 +5,9 @@ Invoked via: blender --background --python uv_checker_glb.py -- <json_config>
 """
 import json
 import sys
-import time
-
-_log_file = None
-_timers = {}
 
 
-def log(msg):
-    print(msg, flush=True)
-    if _log_file:
-        try:
-            _log_file.write(msg + "\n")
-            _log_file.flush()
-        except Exception:
-            pass
-
-
-def timer_start(name):
-    _timers[name] = time.time()
-
-
-def timer_end(name):
-    elapsed = time.time() - _timers.pop(name, time.time())
-    log(f"[timer] {name}: {elapsed:.2f}s")
-    return elapsed
-
-
-def load_color_grid_image():
+def load_color_grid_image(log=print):
     """Load color_grid.png from script directory. Fail fast if missing."""
     import bpy, os
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -117,7 +93,7 @@ def _normalize_uv_edges(uv_edges):
     return result.tolist()
 
 
-def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0)):
+def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0), log=print):
     """
     Draw UV edges for obj onto a transparent canvas and save as PNG.
     seams_only=True: only edges where adjacent faces have different UV coords (seams).
@@ -210,7 +186,7 @@ def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0
     return True
 
 
-def export_uv_layout_for_mesh(obj, output_path, size=(1024, 1024)):
+def export_uv_layout_for_mesh(obj, output_path, size=(1024, 1024), log=print):
     """Export full UV layout (all edges) for UV layout composite image."""
     import bpy, os, bmesh
     import numpy as np
@@ -241,7 +217,7 @@ def export_uv_layout_for_mesh(obj, output_path, size=(1024, 1024)):
     except (RuntimeError, SystemError):
         log(f"UV Checker: bpy.ops.uv.export_layout unavailable (background mode), using bmesh fallback")
 
-    success = _bake_uv_image(obj, output_path, size, seams_only=False)
+    success = _bake_uv_image(obj, output_path, size, seams_only=False, log=log)
     if success:
         log(f"UV Checker: exported UV layout for '{obj.name}' to {output_path} (bmesh fallback)")
     else:
@@ -249,9 +225,9 @@ def export_uv_layout_for_mesh(obj, output_path, size=(1024, 1024)):
     return success
 
 
-def bake_seam_overlay_for_mesh(obj, output_path, size=(1024, 1024)):
+def bake_seam_overlay_for_mesh(obj, output_path, size=(1024, 1024), log=print):
     """Bake UV seam lines only (UV-discontinuous edges) for use as red overlay in material."""
-    success = _bake_uv_image(obj, output_path, size, seams_only=True)
+    success = _bake_uv_image(obj, output_path, size, seams_only=True, log=log)
     if success:
         log(f"UV Checker: baked seam overlay for '{obj.name}' to {output_path}")
     else:
@@ -312,8 +288,7 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0
     pts = np.array(points)  # shape (N, 2): col0=y, col1=x
 
     if thickness > 1:
-        half = thickness // 2
-        offsets = np.arange(-half, half + 1)
+        offsets = np.arange(thickness) - thickness // 2
         # Expand perpendicular to the dominant direction
         if dx >= dy:  # mostly horizontal → expand vertically
             ys = (pts[:, 0:1] + offsets).ravel()
@@ -328,8 +303,15 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0
         canvas[pts[mask, 0], pts[mask, 1]] = color
 
 
-def create_per_mesh_material(obj, grid_img, uv_layout_img):
-    """Create material with color grid base + red seam overlay."""
+def create_per_mesh_material(obj, uv_layout_img, grid_img=None, checker_scale=None):
+    """Create material with color grid or checker base + optional red seam overlay.
+
+    Args:
+        obj: Blender mesh object
+        uv_layout_img: Seam overlay image (or None)
+        grid_img: Color grid image (for color_grid style, or None)
+        checker_scale: Checker scale (for checker style, or None)
+    """
     import bpy
 
     mat_name = f"UV_Checker_{obj.name}"
@@ -347,7 +329,6 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
     bsdf = nodes.new("ShaderNodeBsdfPrincipled")
     bsdf.location = (200, 0)
     bsdf.inputs["Roughness"].default_value = 1.0
-    # Set specular to 0 (name differs between Blender 3.x and 4.x)
     spec_input = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
     if spec_input:
         spec_input.default_value = 0.0
@@ -357,26 +338,35 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
     tex_coord = nodes.new("ShaderNodeTexCoord")
     tex_coord.location = (-600, 0)
 
-    # Color grid texture
-    grid_tex = nodes.new("ShaderNodeTexImage")
-    grid_tex.image = grid_img
-    grid_tex.location = (-350, 100)
-    links.new(tex_coord.outputs["UV"], grid_tex.inputs["Vector"])
+    # Base texture: either color grid or checker
+    if checker_scale is not None:
+        # Checker mode
+        base_tex = nodes.new("ShaderNodeTexChecker")
+        base_tex.inputs["Scale"].default_value = checker_scale
+        base_tex.location = (-350, 100)
+        links.new(tex_coord.outputs["UV"], base_tex.inputs["Vector"])
+        base_output = base_tex.outputs["Color"]
+    else:
+        # Color grid mode
+        base_tex = nodes.new("ShaderNodeTexImage")
+        base_tex.image = grid_img
+        base_tex.location = (-350, 100)
+        links.new(tex_coord.outputs["UV"], base_tex.inputs["Vector"])
+        base_output = base_tex.outputs["Color"]
 
-    # If no UV layout image, connect grid directly to BSDF
+    # If no UV layout image, connect base directly to BSDF
     if uv_layout_img is None:
-        links.new(grid_tex.outputs["Color"], bsdf.inputs["Base Color"])
+        links.new(base_output, bsdf.inputs["Base Color"])
         return mat
 
     # UV layout texture (seam overlay)
     seam_tex = nodes.new("ShaderNodeTexImage")
     seam_tex.image = uv_layout_img
     seam_tex.location = (-350, -150)
-    seam_tex.image.colorspace_settings.name = 'Non-Color'  # Prevent gamma correction
+    seam_tex.image.colorspace_settings.name = 'Non-Color'
     links.new(tex_coord.outputs["UV"], seam_tex.inputs["Vector"])
 
-    # MixRGB: blend grid with red using seam alpha as factor
-    # Handle Blender 3.x (ShaderNodeMixRGB) vs 4.x (ShaderNodeMix)
+    # MixRGB: blend base with red using seam alpha as factor
     try:
         mix = nodes.new("ShaderNodeMix")
         mix.data_type = 'RGBA'
@@ -384,7 +374,7 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
         mix.location = (-50, 0)
         mix.inputs["B"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
         links.new(seam_tex.outputs["Alpha"], mix.inputs["Factor"])
-        links.new(grid_tex.outputs["Color"], mix.inputs["A"])
+        links.new(base_output, mix.inputs["A"])
         links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
     except:
         # Fallback to Blender 3.x API
@@ -393,14 +383,18 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
         mix.location = (-50, 0)
         mix.inputs["Color2"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
         links.new(seam_tex.outputs["Alpha"], mix.inputs["Fac"])
-        links.new(grid_tex.outputs["Color"], mix.inputs["Color1"])
+        links.new(base_output, mix.inputs["Color1"])
         links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
 
     return mat
 
 
-def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0), thickness=1):
-    """Draw UV edges for a group of objects onto a single transparent canvas."""
+def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0), thickness=1, log=print):
+    """Draw UV edges for a group of (obj, face_index_set_or_None) entries onto a single canvas.
+
+    face_index_set: set of face indices to include, or None to include all faces.
+    For seams_only, an edge is included only if at least one adjacent face is in the set.
+    """
     import bpy, os, bmesh
     import numpy as np
 
@@ -410,7 +404,7 @@ def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0
     canvas = np.zeros((height, width, 4), dtype=np.float32)
     UV_EPS = 1e-5
 
-    for obj in objects:
+    for obj, face_filter in entries:
         bm = bmesh.new()
         bm.from_mesh(obj.data)
 
@@ -424,8 +418,14 @@ def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0
 
         if seams_only:
             for edge in bm.edges:
+                # Only process edges adjacent to at least one face in the filter
+                relevant_faces = [f for f in edge.link_faces
+                                  if face_filter is None or f.index in face_filter]
+                if not relevant_faces:
+                    continue
+
                 if len(edge.link_faces) < 2:
-                    for face in edge.link_faces:
+                    for face in relevant_faces:
                         for loop in face.loops:
                             if loop.edge == edge:
                                 uv1 = loop[uv_layer].uv.copy()
@@ -453,6 +453,8 @@ def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0
                             uv_edges.append((u1a.x, u1a.y, u1b.x, u1b.y))
         else:
             for face in bm.faces:
+                if face_filter is not None and face.index not in face_filter:
+                    continue
                 loops = face.loops
                 n = len(loops)
                 for i, loop in enumerate(loops):
@@ -478,20 +480,60 @@ def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0
 
 
 def _group_objects_by_material(mesh_objects):
-    """Group mesh objects by their first material slot. Returns list of (label, [objects])."""
-    groups = {}
+    """Group mesh faces by material. Returns list of (mat_name, [(obj, face_index_set)]).
+
+    A single mesh with multiple material slots is split into per-material face groups.
+    """
+    from collections import defaultdict
+    groups = {}   # mat_name -> {obj -> set of face indices}
     order = []
+
     for obj in mesh_objects:
-        mat = obj.data.materials[0] if obj.data.materials else None
-        key = mat.name if mat else "__no_material__"
-        if key not in groups:
-            groups[key] = []
-            order.append(key)
-        groups[key].append(obj)
-    return [(k, groups[k]) for k in order]
+        mats = obj.data.materials
+        if not mats:
+            key = "__no_material__"
+            if key not in groups:
+                groups[key] = {}
+                order.append(key)
+            groups[key].setdefault(obj, None)  # None = all faces
+            continue
+
+        # Single material slot: no need to filter by face index
+        if len(mats) == 1:
+            key = mats[0].name if mats[0] else "__no_material__"
+            if key not in groups:
+                groups[key] = {}
+                order.append(key)
+            groups[key].setdefault(obj, None)
+            continue
+
+        # Multiple material slots: split faces by material_index
+        face_sets = defaultdict(set)
+        for poly in obj.data.polygons:
+            mat = mats[poly.material_index] if poly.material_index < len(mats) else None
+            key = mat.name if mat else "__no_material__"
+            face_sets[key].add(poly.index)
+
+        for key, face_set in face_sets.items():
+            if key not in groups:
+                groups[key] = {}
+                order.append(key)
+            if obj in groups[key] and groups[key][obj] is None:
+                pass  # already marked as all-faces, leave it
+            elif obj in groups[key]:
+                groups[key][obj] |= face_set
+            else:
+                groups[key][obj] = face_set
+
+    # Convert to list of (mat_name, [(obj, face_filter), ...])
+    result = []
+    for key in order:
+        entries = [(obj, fs) for obj, fs in groups[key].items()]
+        result.append((key, entries))
+    return result
 
 
-def export_uv_layout_composite_grouped(groups, output_path, cell_size=512):
+def export_uv_layout_composite_grouped(groups, output_path, cell_size=512, log=print):
     """Export UV layout from pre-computed material groups into a grid PNG using numpy.
     Objects sharing the same material are drawn together in one cell.
     Draws all UV edges in white, then overlays seams in red."""
@@ -512,15 +554,15 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512):
 
     tmp_dir = tempfile.mkdtemp(prefix="uv_layout_")
 
-    for i, (mat_name, objects) in enumerate(groups):
+    for i, (mat_name, entries) in enumerate(groups):
         col = i % cols
         row = i // cols
 
         tmp_all = os.path.join(tmp_dir, f"uv_all_{i:04d}.png")
-        _bake_uv_image_group(objects, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0), thickness=1)
+        _bake_uv_image_group(entries, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0), thickness=1)
 
         tmp_seam = os.path.join(tmp_dir, f"uv_seam_{i:04d}.png")
-        _bake_uv_image_group(objects, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0), thickness=3)
+        _bake_uv_image_group(entries, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0), thickness=3)
 
         img_all = bpy.data.images.load(tmp_all, check_existing=False)
         img_all.colorspace_settings.name = 'Non-Color'
@@ -549,42 +591,14 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512):
     bpy.data.images.remove(out_img)
 
     group_summary = ", ".join(
-        f"{name}({len(objs)} mesh{'es' if len(objs) > 1 else ''})" for name, objs in groups
+        f"{name}({sum(1 for _ in entries)} part(s))" for name, entries in groups
     )
     log(f"UV Checker: UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} material group(s): {group_summary})")
 
 
-def create_checker_material(scale):
-    import bpy
-
-    mat = bpy.data.materials.new(name="UV_Checker")
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    nodes.clear()
-
-    output = nodes.new("ShaderNodeOutputMaterial")
-    output.location = (400, 0)
-
-    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
-    bsdf.location = (200, 0)
-    links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
-
-    checker = nodes.new("ShaderNodeTexChecker")
-    checker.inputs["Scale"].default_value = scale
-    checker.location = (-200, 0)
-
-    tex_coord = nodes.new("ShaderNodeTexCoord")
-    tex_coord.location = (-400, 0)
-
-    links.new(tex_coord.outputs["UV"], checker.inputs["Vector"])
-    links.new(checker.outputs["Color"], bsdf.inputs["Base Color"])
-
-    return mat
 
 
 def main() -> None:
-    global _log_file
     import bpy, os, tempfile, shutil
 
     separator_idx = sys.argv.index("--")
@@ -592,30 +606,27 @@ def main() -> None:
     config = json.loads(config_json)
     opts = config.get("script_options", {})
 
-    # Open log file
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
+    rv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rv)
+
     output_dir = config.get("output_dir", "./output")
     base_name = config.get("filename_pattern", "render")
-    os.makedirs(output_dir, exist_ok=True)
-    log_path = os.path.join(output_dir, f"{base_name}_uv_checker.log")
-    _log_file = open(log_path, 'w', encoding='utf-8')
-    log(f"UV Checker: log file opened at {log_path}")
+    rv.configure_log(config.get("enable_log", True))
+    rv.open_log(output_dir, base_name, "uv_checker")
 
     try:
-        timer_start("total")
+        rv.timer_start("total")
 
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "render_views", os.path.join(os.path.dirname(__file__), "render_views.py"))
-        rv = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(rv)
-
-        timer_start("import_model")
+        rv.timer_start("import_model")
         glb_file = opts.get("glb_file")
         if glb_file:
             rv.import_model(bpy, glb_file)
         else:
-            log("UV Checker: Warning - no glb_file specified in script_options")
-        timer_end("import_model")
+            rv.log("UV Checker: Warning - no glb_file specified in script_options")
+        rv.timer_end("import_model")
 
         rv.normalize_model(bpy)
 
@@ -623,51 +634,50 @@ def main() -> None:
         scale = opts.get("scale", 8.0)
         enable_seam_overlay = opts.get("enable_seam_overlay", True)
         export_uv_layout = opts.get("export_uv_layout", True)
-        log(f"UV Checker: style={style}, enable_seam_overlay={enable_seam_overlay}, export_uv_layout={export_uv_layout}")
+        rv.log(f"UV Checker: style={style}, enable_seam_overlay={enable_seam_overlay}, export_uv_layout={export_uv_layout}")
 
         mesh_objects = rv._get_model_mesh_objects(bpy)
         uv_mesh_objects = [obj for obj in mesh_objects if obj.data.uv_layers]
 
-        if style == "checker":
-            material = create_checker_material(scale)
-            for obj in uv_mesh_objects:
-                obj.data.materials.clear()
-                obj.data.materials.append(material)
-            log(f"UV Checker: applied checker material to {len(uv_mesh_objects)} mesh(es)")
+        grid_img = None
+        original_material_groups = []
+        tmp_dir = None
+        uv_layout_images = {}
+
+        if not uv_mesh_objects:
+            rv.log("UV Checker: no meshes with UVs found, rendering scene as-is")
         else:
-            # Load color grid once
-            grid_img = load_color_grid_image()
+            if style == "color_grid":
+                grid_img = load_color_grid_image(log=rv.log)
 
-            if not uv_mesh_objects:
-                log("UV Checker: no meshes with UVs found, rendering scene as-is")
-            else:
-                # Record original material grouping BEFORE replacing materials
-                original_material_groups = _group_objects_by_material(uv_mesh_objects)
-                log(f"UV Checker: {len(original_material_groups)} material group(s) detected: "
-                    + ", ".join(f"{k}({len(v)})" for k, v in original_material_groups))
+            original_material_groups = _group_objects_by_material(uv_mesh_objects)
+            rv.log(f"UV Checker: {len(original_material_groups)} material group(s) detected: "
+                + ", ".join(f"{k}({sum(1 for _ in v)})" for k, v in original_material_groups))
 
-                tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
-                uv_layout_images = {}
+            tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
 
-                if enable_seam_overlay:
-                    timer_start("bake_seams")
-                    for i, obj in enumerate(uv_mesh_objects):
-                        seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
-                        success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024))
-                        if success:
-                            uv_img = bpy.data.images.load(seam_path, check_existing=False)
-                            uv_img.colorspace_settings.name = 'Non-Color'
-                            uv_layout_images[obj.name] = uv_img
-                    timer_end("bake_seams")
+            if enable_seam_overlay:
+                rv.timer_start("bake_seams")
+                for i, obj in enumerate(uv_mesh_objects):
+                    seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
+                    success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024), log=rv.log)
+                    if success:
+                        uv_img = bpy.data.images.load(seam_path, check_existing=False)
+                        uv_img.colorspace_settings.name = 'Non-Color'
+                        uv_layout_images[obj.name] = uv_img
+                rv.timer_end("bake_seams")
 
-                for obj in uv_mesh_objects:
-                    mat = create_per_mesh_material(
-                        obj, grid_img, uv_layout_images.get(obj.name)
-                    )
-                    obj.data.materials.clear()
-                    obj.data.materials.append(mat)
+            for obj in uv_mesh_objects:
+                mat = create_per_mesh_material(
+                    obj,
+                    uv_layout_images.get(obj.name),
+                    grid_img=grid_img,
+                    checker_scale=scale if style == "checker" else None,
+                )
+                obj.data.materials.clear()
+                obj.data.materials.append(mat)
 
-                log(f"UV Checker: applied per-mesh materials to {len(uv_mesh_objects)} mesh(es)")
+            rv.log(f"UV Checker: applied per-mesh materials to {len(uv_mesh_objects)} mesh(es)")
 
         scene = bpy.context.scene
         render = scene.render
@@ -690,45 +700,41 @@ def main() -> None:
 
         rv.setup_white_world(scene)
 
-        # Use Standard view transform so seam red renders as true red (not AgX/Filmic shifted)
         scene.view_settings.view_transform = 'Standard'
         scene.view_settings.look = 'None'
-        log("UV Checker: view transform set to Standard")
+        rv.log("UV Checker: view transform set to Standard")
 
         if not mesh_objects:
-            log("UV Checker: no mesh objects found")
+            rv.log("UV Checker: no mesh objects found")
             return
 
         center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
         rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
 
-        timer_start("render")
+        rv.timer_start("render")
         rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "UV Checker")
-        timer_end("render")
+        rv.timer_end("render")
 
-        # Export UV layout composite after rendering
-        if style == "color_grid" and uv_mesh_objects and export_uv_layout:
-            timer_start("uv_layout_composite")
+        if uv_mesh_objects and export_uv_layout and original_material_groups:
+            rv.timer_start("uv_layout_composite")
             uv_composite_path = os.path.join(output_dir, f"{base_name}_uv_layout.png")
-            export_uv_layout_composite_grouped(original_material_groups, uv_composite_path, cell_size=512)
-            timer_end("uv_layout_composite")
+            export_uv_layout_composite_grouped(original_material_groups, uv_composite_path, cell_size=512, log=rv.log)
+            rv.timer_end("uv_layout_composite")
 
-        # Cleanup
-        if style == "color_grid" and uv_mesh_objects:
+        if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            for img in uv_layout_images.values():
-                bpy.data.images.remove(img)
+        for img in uv_layout_images.values():
+            bpy.data.images.remove(img)
 
-        timer_end("total")
-        log("UV Checker: completed successfully")
+        rv.timer_end("total")
+        rv.log("UV Checker: completed successfully")
     except Exception as e:
-        log(f"UV Checker: ERROR - {e}")
+        rv.log(f"UV Checker: ERROR - {e}")
         import traceback
-        log(traceback.format_exc())
+        rv.log(traceback.format_exc())
         raise
     finally:
-        if _log_file:
-            _log_file.close()
+        rv.close_log()
 
 
 if __name__ == "__main__":

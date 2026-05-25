@@ -8,17 +8,7 @@ import math
 import sys
 
 
-def import_glb(filepath):
-    import bpy
-
-    bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.object.delete(use_global=False)
-
-    bpy.ops.import_scene.gltf(filepath=filepath)
-    print(f"Clay: imported {filepath}")
-
-
-def setup_workbench_matcap(scene, matcap_name="basic_grey.exr"):
+def setup_workbench_matcap(scene, matcap_name="basic_grey.exr", log=print):
     """Configure Workbench render engine with Solid MatCap shading."""
     import bpy
 
@@ -27,13 +17,12 @@ def setup_workbench_matcap(scene, matcap_name="basic_grey.exr"):
     shading.color_type = 'MATERIAL'
     shading.background_type = 'THEME'  # transparent background in Workbench render
 
-    # Try to set the requested matcap
     try:
         shading.studio_light = matcap_name
     except Exception:
-        print(f"Clay: matcap '{matcap_name}' not found, using default")
+        log(f"Clay: matcap '{matcap_name}' not found, using default")
 
-    print(f"Clay: Workbench matcap configured (light=MATCAP, color_type=MATERIAL, matcap={shading.studio_light})")
+    log(f"Clay: Workbench matcap configured (light=MATCAP, color_type=MATERIAL, matcap={shading.studio_light})")
 
 
 def create_simple_gray_material():
@@ -45,7 +34,7 @@ def create_simple_gray_material():
     return mat
 
 
-def apply_material_to_meshes(material):
+def apply_material_to_meshes(material, log=print):
     """Apply material to all mesh objects."""
     import bpy
 
@@ -57,7 +46,7 @@ def apply_material_to_meshes(material):
         obj.data.materials.append(material)
         applied += 1
 
-    print(f"Clay: applied gray material to {applied} mesh(es)")
+    log(f"Clay: applied gray material to {applied} mesh(es)")
     return applied
 
 
@@ -75,43 +64,51 @@ def main() -> None:
     rv = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rv)
 
-    glb_file = opts.get("glb_file")
-    if glb_file:
-        rv.import_model(bpy, glb_file)
-    else:
-        print("Clay: Warning - no glb_file specified")
-        return
+    rv.configure_log(config.get("enable_log", True))
+    output_dir = config.get("output_dir", "./output")
+    base_name = config.get("filename_pattern", "render")
+    rv.open_log(output_dir, base_name, "clay")
 
-    rv.normalize_model(bpy)
+    try:
+        glb_file = opts.get("glb_file")
+        if glb_file:
+            rv.import_model(bpy, glb_file)
+        else:
+            rv.log("Clay: Warning - no glb_file specified")
+            return
 
-    scene = bpy.context.scene
-    render = scene.render
+        rv.normalize_model(bpy)
 
-    render.engine = 'BLENDER_WORKBENCH'
-    render.resolution_x = config.get("resolution_x", 1920)
-    render.resolution_y = config.get("resolution_y", 1080)
-    render.resolution_percentage = config.get("resolution_percentage", 100)
+        scene = bpy.context.scene
+        render = scene.render
 
-    fmt = config.get("output_format", "PNG")
-    render.image_settings.file_format = fmt
-    render.image_settings.color_mode = 'RGBA'
-    render.film_transparent = True
+        render.engine = 'BLENDER_WORKBENCH'
+        render.resolution_x = config.get("resolution_x", 1920)
+        render.resolution_y = config.get("resolution_y", 1080)
+        render.resolution_percentage = config.get("resolution_percentage", 100)
 
-    matcap_name = opts.get("matcap", "basic_grey.exr")
-    setup_workbench_matcap(scene, matcap_name)
+        fmt = config.get("output_format", "PNG")
+        render.image_settings.file_format = fmt
+        render.image_settings.color_mode = 'RGBA'
+        render.film_transparent = True
 
-    mat = create_simple_gray_material()
-    apply_material_to_meshes(mat)
+        matcap_name = opts.get("matcap", "basic_grey.exr")
+        setup_workbench_matcap(scene, matcap_name, log=rv.log)
 
-    mesh_objects = rv._get_model_mesh_objects(bpy)
-    if not mesh_objects:
-        print("Clay: no mesh objects found")
-        return
+        mat = create_simple_gray_material()
+        apply_material_to_meshes(mat, log=rv.log)
 
-    center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
-    rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+        mesh_objects = rv._get_model_mesh_objects(bpy)
+        if not mesh_objects:
+            rv.log("Clay: no mesh objects found")
+            return
 
-    rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Clay")
+        center, bbox_size = rv.get_bounding_box_evaluated(bpy, mesh_objects)
+        rv.setup_camera(scene, center, bbox_size, render.resolution_x, render.resolution_y)
+
+        rv.render_multi_view(bpy, scene, rv.setup_camera, center, bbox_size, opts, config, "Clay")
+    finally:
+        rv.close_log()
 
 
 if __name__ == "__main__":

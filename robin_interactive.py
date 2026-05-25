@@ -83,6 +83,7 @@ DEFAULT_CONFIG = {
     "wireframe_mode": "clay",
     "animation_frame": None,
     "camera_json": "",
+    "enable_log": True,
 }
 
 
@@ -263,6 +264,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
             args.append("--no-seam-overlay")
         if not cfg.get("export_uv_layout", True):
             args.append("--no-uv-layout")
+    if not cfg.get("enable_log", True):
+        args.append("--no-log")
     if command == "wireframe":
         args += ["--mode", wireframe_mode]
     try:
@@ -295,6 +298,7 @@ def edit_config(cfg):
             (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
             (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
             (f"相机参考文件: {cfg.get('camera_json', '(不指定)') or '(不指定)'}", "camera_json"),
+            (f"写入日志文件: {'是' if cfg.get('enable_log', True) else '否'}", "enable_log"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
         ]
@@ -449,6 +453,10 @@ def edit_config(cfg):
             else:
                 cfg["camera_json"] = ""
                 print(f"  {GREEN}已清除{RESET}\n")
+
+        elif key == "enable_log":
+            cfg["enable_log"] = not cfg.get("enable_log", True)
+            print(f"\n  {GREEN}写入日志文件: {'已开启' if cfg['enable_log'] else '已关闭'}{RESET}\n")
 
 
 def clear_render_folders(base_output, commands):

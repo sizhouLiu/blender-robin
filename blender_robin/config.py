@@ -38,6 +38,7 @@ class RenderConfig:
     script_name: str = "render_setup.py"
     script_options: dict = field(default_factory=dict)
     extra_args: list[str] = field(default_factory=list)
+    enable_log: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> Self:
@@ -126,6 +127,7 @@ class RenderConfig:
             "use_script": self.use_script,
             "script_name": self.script_name,
             "extra_args": self.extra_args,
+            "enable_log": self.enable_log,
         }
         if self.script_options:
             d["script_options"] = self.script_options
