@@ -47,6 +47,76 @@ def load_color_grid_image():
     return img
 
 
+def _normalize_uv_edges(uv_edges):
+    """
+    Shift UV islands that lie outside [0,1] back into [0,1] space.
+    Each island (connected component of edges) is shifted by the integer floor
+    of its own bounding-box minimum, so the island shape is never distorted.
+    uv_edges: list of (u1x, u1y, u2x, u2y) tuples.
+    Returns a new list with the same structure but shifted coordinates.
+    """
+    import math
+    import numpy as np
+
+    if not uv_edges:
+        return uv_edges
+
+    arr = np.array(uv_edges, dtype=np.float64)
+
+    # Build adjacency: each edge connects two UV points (rounded to avoid float noise).
+    # Use union-find to group edges into islands, then shift each island as a unit.
+    ROUND = 6  # decimal places for UV coord key
+
+    def _key(u, v):
+        return (round(float(u), ROUND), round(float(v), ROUND))
+
+    # Union-Find on edge indices
+    parent = list(range(len(arr)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        a, b = find(a), find(b)
+        if a != b:
+            parent[b] = a
+
+    # Map UV point key -> first edge index that introduced it
+    point_to_edge = {}
+    for i, (u1, v1, u2, v2) in enumerate(arr):
+        for k in (_key(u1, v1), _key(u2, v2)):
+            if k in point_to_edge:
+                union(i, point_to_edge[k])
+            else:
+                point_to_edge[k] = i
+
+    # Group edges by island root
+    from collections import defaultdict
+    islands = defaultdict(list)
+    for i in range(len(arr)):
+        islands[find(i)].append(i)
+
+    # Shift each island by floor of its bounding-box min
+    result = arr.copy()
+    for indices in islands.values():
+        idx = np.array(indices)
+        island = arr[idx]  # shape (N, 4)
+        all_u = np.concatenate([island[:, 0], island[:, 2]])
+        all_v = np.concatenate([island[:, 1], island[:, 3]])
+        shift_u = math.floor(np.min(all_u))
+        shift_v = math.floor(np.min(all_v))
+        if shift_u != 0 or shift_v != 0:
+            result[idx, 0] -= shift_u
+            result[idx, 1] -= shift_v
+            result[idx, 2] -= shift_u
+            result[idx, 3] -= shift_v
+
+    return result.tolist()
+
+
 def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0)):
     """
     Draw UV edges for obj onto a transparent canvas and save as PNG.
@@ -125,6 +195,7 @@ def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0
     bm.free()
 
     if uv_edges:
+        uv_edges = _normalize_uv_edges(uv_edges)
         uv_edges = np.array(uv_edges, dtype=np.float32)
         uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width,  0, width  - 1)
         uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
@@ -328,7 +399,7 @@ def create_per_mesh_material(obj, grid_img, uv_layout_img):
     return mat
 
 
-def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0)):
+def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0), thickness=1):
     """Draw UV edges for a group of objects onto a single transparent canvas."""
     import bpy, os, bmesh
     import numpy as np
@@ -392,11 +463,12 @@ def _bake_uv_image_group(objects, output_path, size, seams_only, color=(1.0, 1.0
         bm.free()
 
         if uv_edges:
+            uv_edges = _normalize_uv_edges(uv_edges)
             arr = np.array(uv_edges, dtype=np.float32)
             arr[:, [0, 2]] = np.clip(arr[:, [0, 2]] * width, 0, width - 1)
             arr[:, [1, 3]] = np.clip((1.0 - arr[:, [1, 3]]) * height, 0, height - 1)
             for x0, y0, x1, y1 in arr.astype(int):
-                _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color)
+                _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color, thickness)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
@@ -445,10 +517,10 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512):
         row = i // cols
 
         tmp_all = os.path.join(tmp_dir, f"uv_all_{i:04d}.png")
-        _bake_uv_image_group(objects, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0))
+        _bake_uv_image_group(objects, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0), thickness=1)
 
         tmp_seam = os.path.join(tmp_dir, f"uv_seam_{i:04d}.png")
-        _bake_uv_image_group(objects, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0))
+        _bake_uv_image_group(objects, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0), thickness=3)
 
         img_all = bpy.data.images.load(tmp_all, check_existing=False)
         img_all.colorspace_settings.name = 'Non-Color'
