@@ -498,11 +498,13 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
     v_max += v_range * 0.05
 
     # Map UV coords to canvas pixels
+    # save_render() flips V automatically (Blender bottom-up → PNG top-down)
+    # so we do NOT flip V here; U is left-to-right, matching Blender UV editor
     canvas = np.zeros((height, width, 4), dtype=np.float32)
-    arr[:, 0] = (arr[:, 0] - u_min) / (u_max - u_min) * width
-    arr[:, 2] = (arr[:, 2] - u_min) / (u_max - u_min) * width
-    arr[:, 1] = (1.0 - (arr[:, 1] - v_min) / (v_max - v_min)) * height
-    arr[:, 3] = (1.0 - (arr[:, 3] - v_min) / (v_max - v_min)) * height
+    arr[:, 0] = (arr[:, 0] - u_min) / (u_max - u_min) * (width - 1)
+    arr[:, 2] = (arr[:, 2] - u_min) / (u_max - u_min) * (width - 1)
+    arr[:, 1] = (arr[:, 1] - v_min) / (v_max - v_min) * (height - 1)
+    arr[:, 3] = (arr[:, 3] - v_min) / (v_max - v_min) * (height - 1)
 
     arr = np.clip(arr, 0, [width-1, height-1, width-1, height-1])
 
@@ -845,9 +847,9 @@ def main() -> None:
 
         rv.setup_white_world(scene)
 
-        scene.view_settings.view_transform = 'Standard'
-        scene.view_settings.look = 'None'
-        rv.log("UV Checker: view transform set to Standard")
+        # scene.view_settings.view_transform = 'Standard'
+        # scene.view_settings.look = 'None'
+        # rv.log("UV Checker: view transform set to Standard")
 
         if not mesh_objects:
             rv.log("UV Checker: no mesh objects found")
