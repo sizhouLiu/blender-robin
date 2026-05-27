@@ -72,13 +72,10 @@ class BlenderRenderer:
 
     def _build_script_command(self, config: RenderConfig) -> list[str]:
         script_path = Path(__file__).parent / "blender_scripts" / config.script_name
-        cmd = [
-            str(self.blender_path),
-            "--background",
-        ]
+        cmd = [str(self.blender_path)]
 
-        # Always start with empty scene in script mode — the script imports the model
-        # (opening .blend as main scene and then appending from it via libraries.load fails)
+        if not config.foreground:
+            cmd.append("--background")
 
         cmd += [
             "--python", str(script_path),
@@ -101,11 +98,23 @@ class BlenderRenderer:
         stderr_lines: list[str] = []
         start = time.monotonic()
 
-        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        if config.foreground:
+            creationflags = 0
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
+        elif sys.platform == "win32":
+            creationflags = subprocess.CREATE_NO_WINDOW
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
+        else:
+            creationflags = 0
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
+
         proc = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=stdout,
+            stderr=stderr,
             text=True,
             encoding='utf-8',
             errors='replace',
@@ -127,6 +136,10 @@ class BlenderRenderer:
         elapsed = time.monotonic() - start
 
         success = proc.returncode == 0
+        if not success and stderr_lines:
+            print(f"[Blender stderr] {config.blend_file.name}:")
+            for line in stderr_lines[-30:]:
+                print(f"  {line}")
         return RenderResult(
             success=success,
             blend_file=config.blend_file,

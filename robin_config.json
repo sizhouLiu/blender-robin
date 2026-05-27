@@ -4,7 +4,7 @@
     1024,
     1024
   ],
-  "parallel": 4,
+  "parallel": 6,
   "views": [
     "diagonal",
     "front",
@@ -12,13 +12,14 @@
     "left"
   ],
   "closeup_count": 4,
-  "composite": false,
+  "composite": true,
   "uv_style": "checker",
-  "delete_views": false,
+  "delete_views": true,
   "export_metadata": false,
   "output_format": "PNG",
-  "wireframe_mode": "clay",
+  "wireframe_mode": "normal",
   "animation_frame": 1,
-  "delete_closeups": false,
-  "camera_json": ""
+  "delete_closeups": true,
+  "camera_json": "",
+  "export_blender_uv": false
 }

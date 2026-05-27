@@ -230,13 +230,14 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
 @click.option("--scale", type=float, default=8.0, help="Checker scale (only for 'checker' style).")
 @click.option("--seam-overlay/--no-seam-overlay", default=True, help="Overlay red seam lines on the render.")
 @click.option("--uv-layout/--no-uv-layout", default=True, help="Export UV layout composite image.")
+@click.option("--blender-uv/--no-blender-uv", default=False, help="Export Blender built-in UV layout (requires foreground mode).")
 @_common_render_options
 @click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
 def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[int, int],
-             style: str, scale: float, seam_overlay: bool, uv_layout: bool,
+             style: str, scale: float, seam_overlay: bool, uv_layout: bool, blender_uv: bool,
              views: str | None, closeup_count: int, no_composite: bool,
              delete_views: bool, delete_closeups: bool, camera_json: str | None, hdri: str | None, env_texture: str | None,
              export_metadata: bool, animation_frame: int | None, output_format: str, enable_log: bool,
@@ -274,8 +275,10 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
                 scale=scale,
                 enable_seam_overlay=seam_overlay,
                 export_uv_layout=uv_layout,
+                export_blender_uv=blender_uv,
             ),
             enable_log=enable_log,
+            foreground=blender_uv,
         )
         configs.append(cfg)
 

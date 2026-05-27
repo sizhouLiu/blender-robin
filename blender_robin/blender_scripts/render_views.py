@@ -156,25 +156,9 @@ def import_model(bpy, filepath):
 
 def _get_model_mesh_objects(bpy):
     """
-    Get mesh objects that belong to the imported model hierarchy.
-    Excludes orphan/helper meshes (like Icosphere) that are not part of the main model tree.
-    Strategy: find the primary root (deepest hierarchy), collect all meshes under it.
-    If all meshes are roots, return all of them.
+    Return all renderable mesh objects in the scene.
     """
-    all_meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
-    if not all_meshes:
-        return []
-
-    # Separate meshes that have a parent chain vs orphan root meshes
-    parented_meshes = [obj for obj in all_meshes if obj.parent is not None]
-
-    if parented_meshes:
-        # If there are parented meshes, those are the real model.
-        # Orphan root meshes (like Icosphere) are likely helpers/artifacts.
-        return parented_meshes
-
-    # All meshes are roots - return all
-    return all_meshes
+    return [obj for obj in bpy.context.scene.objects if obj.type == "MESH" and not obj.hide_render]
 
 
 def normalize_model(bpy, target_size=2.0):
@@ -431,12 +415,12 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     camera_angle_x = 2.0 * math.atan(default_sensor_width / 2.0 / default_lens)
 
     ortho_views = {
-        "front":  (mathutils.Vector((0, -1, 0)),  mathutils.Euler((math.pi / 2, 0, 0))),
-        "back":   (mathutils.Vector((0, 1, 0)),   mathutils.Euler((math.pi / 2, 0, math.pi))),
-        "left":   (mathutils.Vector((-1, 0, 0)),  mathutils.Euler((math.pi / 2, 0, -math.pi / 2))),
-        "right":  (mathutils.Vector((1, 0, 0)),   mathutils.Euler((math.pi / 2, 0, math.pi / 2))),
-        "top":    (mathutils.Vector((0, 0, 1)),   mathutils.Euler((0, 0, 0))),
-        "bottom": (mathutils.Vector((0, 0, -1)),  mathutils.Euler((math.pi, 0, 0))),
+        "front":  (mathutils.Vector((0, -1, 0)),  mathutils.Euler((math.pi / 2, 0, 0)),              bbox_size.x, bbox_size.z),
+        "back":   (mathutils.Vector((0, 1, 0)),   mathutils.Euler((math.pi / 2, 0, math.pi)),        bbox_size.x, bbox_size.z),
+        "left":   (mathutils.Vector((-1, 0, 0)),  mathutils.Euler((math.pi / 2, 0, -math.pi / 2)),  bbox_size.y, bbox_size.z),
+        "right":  (mathutils.Vector((1, 0, 0)),   mathutils.Euler((math.pi / 2, 0, math.pi / 2)),   bbox_size.y, bbox_size.z),
+        "top":    (mathutils.Vector((0, 0, 1)),   mathutils.Euler((0, 0, 0)),                        bbox_size.x, bbox_size.y),
+        "bottom": (mathutils.Vector((0, 0, -1)),  mathutils.Euler((math.pi, 0, 0)),                  bbox_size.x, bbox_size.y),
     }
 
     max_dim = max(bbox_size.x, bbox_size.y, bbox_size.z)
@@ -496,12 +480,14 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
             continue
         elif view_name in ortho_views:
             cam_data.type = 'ORTHO'
-            cam_data.ortho_scale = max_dim * 1.05
-            direction, rotation = ortho_views[view_name]
+            direction, rotation, view_w, view_h = ortho_views[view_name]
+            aspect = render.resolution_x / render.resolution_y
+            cam_data.ortho_scale = max(view_h, view_w / aspect) * 1.20
             camera.location = center + direction * distance
             camera.rotation_euler = rotation
             cam_data.clip_start = 0.01
             cam_data.clip_end = distance * 3
+            log(f"{label}: {view_name} ortho_scale={cam_data.ortho_scale:.4f} (view_w={view_w:.4f}, view_h={view_h:.4f}, aspect={aspect:.4f})")
         else:
             continue
 

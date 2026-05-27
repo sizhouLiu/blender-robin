@@ -394,6 +394,8 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
 
     face_index_set: set of face indices to include, or None to include all faces.
     For seams_only, an edge is included only if at least one adjacent face is in the set.
+
+    UV coordinates are NOT normalized - if UVs extend beyond [0,1], the canvas will fit the actual UV bounds.
     """
     import bpy, os, bmesh
     import numpy as np
@@ -401,8 +403,9 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     width, height = size
-    canvas = np.zeros((height, width, 4), dtype=np.float32)
     UV_EPS = 1e-5
+
+    all_uv_edges = []
 
     for obj, face_filter in entries:
         bm = bmesh.new()
@@ -463,19 +466,55 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
                     uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
 
         bm.free()
+        all_uv_edges.extend(uv_edges)
 
-        if uv_edges:
-            uv_edges = _normalize_uv_edges(uv_edges)
-            arr = np.array(uv_edges, dtype=np.float32)
-            arr[:, [0, 2]] = np.clip(arr[:, [0, 2]] * width, 0, width - 1)
-            arr[:, [1, 3]] = np.clip((1.0 - arr[:, [1, 3]]) * height, 0, height - 1)
-            for x0, y0, x1, y1 in arr.astype(int):
-                _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color, thickness)
+    if not all_uv_edges:
+        # No UV data, create empty image
+        canvas = np.zeros((height, width, 4), dtype=np.float32)
+        img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
+        img.pixels.foreach_set(canvas.ravel())
+        _save_render_standard(img, output_path)
+        bpy.data.images.remove(img)
+        return True
+
+    # Compute actual UV bounding box (no normalization)
+    arr = np.array(all_uv_edges, dtype=np.float32)
+    all_u = np.concatenate([arr[:, 0], arr[:, 2]])
+    all_v = np.concatenate([arr[:, 1], arr[:, 3]])
+    u_min, u_max = np.min(all_u), np.max(all_u)
+    v_min, v_max = np.min(all_v), np.max(all_v)
+
+    # Add 5% padding
+    u_range = u_max - u_min
+    v_range = v_max - v_min
+    if u_range < 1e-6:
+        u_range = 1.0
+    if v_range < 1e-6:
+        v_range = 1.0
+
+    u_min -= u_range * 0.05
+    u_max += u_range * 0.05
+    v_min -= v_range * 0.05
+    v_max += v_range * 0.05
+
+    # Map UV coords to canvas pixels
+    canvas = np.zeros((height, width, 4), dtype=np.float32)
+    arr[:, 0] = (arr[:, 0] - u_min) / (u_max - u_min) * width
+    arr[:, 2] = (arr[:, 2] - u_min) / (u_max - u_min) * width
+    arr[:, 1] = (1.0 - (arr[:, 1] - v_min) / (v_max - v_min)) * height
+    arr[:, 3] = (1.0 - (arr[:, 3] - v_min) / (v_max - v_min)) * height
+
+    arr = np.clip(arr, 0, [width-1, height-1, width-1, height-1])
+
+    for x0, y0, x1, y1 in arr.astype(int):
+        _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color, thickness)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
     _save_render_standard(img, output_path)
     bpy.data.images.remove(img)
+
+    log(f"UV Checker: UV range for this group: U=[{u_min:.3f}, {u_max:.3f}], V=[{v_min:.3f}, {v_max:.3f}]")
     return True
 
 
@@ -598,6 +637,111 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512, log=p
 
 
 
+def export_blender_uv_layout_composite_grouped(groups, output_path, uv_layout_images, cell_size=2048, log=print):
+    """Export Blender built-in UV layout per material group, composite into same grid as the numpy version.
+    Requires foreground mode (bpy.ops.uv.export_layout needs a window context).
+    Overlays seam lines in red using pre-baked uv_layout_images."""
+    import bpy, os, math, tempfile, shutil
+    import bmesh
+    import numpy as np
+
+    if not groups:
+        return
+
+    n = len(groups)
+    cols = math.ceil(math.sqrt(n))
+    rows = math.ceil(n / cols)
+    canvas_w = cols * cell_size
+    canvas_h = rows * cell_size
+
+    canvas = np.zeros((canvas_h, canvas_w, 4), dtype=np.float32)
+
+    tmp_dir = tempfile.mkdtemp(prefix="uv_blender_layout_")
+
+    def _export_group_layout(entries, out_path):
+        """Select only this group's faces, export, restore."""
+        hidden_info = []
+        bpy.ops.object.select_all(action='DESELECT')
+
+        for obj, face_filter in entries:
+            if not obj.data.uv_layers:
+                continue
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            if face_filter is not None:
+                bm = bmesh.new()
+                bm.from_mesh(obj.data)
+                bm.faces.ensure_lookup_table()
+                states = [f.hide for f in bm.faces]
+                for f in bm.faces:
+                    f.hide = f.index not in face_filter
+                bm.to_mesh(obj.data)
+                obj.data.update()
+                hidden_info.append((obj, bm, states))
+
+        try:
+            bpy.ops.uv.export_layout(
+                filepath=out_path,
+                export_all=True,
+                mode='PNG',
+                size=(cell_size, cell_size),
+                opacity=0.25,
+            )
+        finally:
+            for obj, bm, states in hidden_info:
+                for f, state in zip(bm.faces, states):
+                    f.hide = state
+                bm.to_mesh(obj.data)
+                obj.data.update()
+                bm.free()
+            bpy.ops.object.select_all(action='DESELECT')
+
+    try:
+        for i, (mat_name, entries) in enumerate(groups):
+            col = i % cols
+            row = i // cols
+
+            tmp_path = os.path.join(tmp_dir, f"uv_blender_{i:04d}.png")
+            _export_group_layout(entries, tmp_path)
+
+            uv_img = bpy.data.images.load(tmp_path, check_existing=False)
+            uv_img.colorspace_settings.name = 'Non-Color'
+            cell = np.array(uv_img.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4)).copy()
+            bpy.data.images.remove(uv_img)
+
+            # Overlay seam lines in red
+            for obj, _ in entries:
+                seam_img = uv_layout_images.get(obj.name)
+                if seam_img is None:
+                    continue
+                sw, sh = seam_img.size
+                if sw != cell_size or sh != cell_size:
+                    seam_img.scale(cell_size, cell_size)
+                seam = np.array(seam_img.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
+                mask = seam[..., 0] > 0.1
+                cell[mask] = (1.0, 0.0, 0.0, 1.0)
+
+            y0 = row * cell_size
+            x0 = col * cell_size
+            canvas[y0:y0 + cell_size, x0:x0 + cell_size] = cell
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    out_img = bpy.data.images.new(
+        "UV_Blender_Layout_Composite", width=canvas_w, height=canvas_h, alpha=True
+    )
+    out_img.pixels.foreach_set(canvas.ravel())
+    _save_render_standard(out_img, output_path)
+    bpy.data.images.remove(out_img)
+
+    group_summary = ", ".join(
+        f"{name}({sum(1 for _ in entries)} part(s))" for name, entries in groups
+    )
+    log(f"UV Checker: Blender UV layout composite saved to {output_path} ({cols}x{rows} grid, {n} group(s): {group_summary})")
+
+
 def main() -> None:
     import bpy, os, tempfile, shutil
 
@@ -634,7 +778,8 @@ def main() -> None:
         scale = opts.get("scale", 8.0)
         enable_seam_overlay = opts.get("enable_seam_overlay", True)
         export_uv_layout = opts.get("export_uv_layout", True)
-        rv.log(f"UV Checker: style={style}, enable_seam_overlay={enable_seam_overlay}, export_uv_layout={export_uv_layout}")
+        export_blender_uv = opts.get("export_blender_uv", False)
+        rv.log(f"UV Checker: style={style}, enable_seam_overlay={enable_seam_overlay}, export_uv_layout={export_uv_layout}, export_blender_uv={export_blender_uv}")
 
         mesh_objects = rv._get_model_mesh_objects(bpy)
         uv_mesh_objects = [obj for obj in mesh_objects if obj.data.uv_layers]
@@ -721,6 +866,21 @@ def main() -> None:
             export_uv_layout_composite_grouped(original_material_groups, uv_composite_path, cell_size=512, log=rv.log)
             rv.timer_end("uv_layout_composite")
 
+        if uv_mesh_objects and export_blender_uv and original_material_groups:
+            rv.timer_start("blender_uv_export")
+            try:
+                blender_uv_path = os.path.join(output_dir, f"{base_name}_blender_uv_layout.png")
+                export_blender_uv_layout_composite_grouped(
+                    original_material_groups,
+                    blender_uv_path,
+                    uv_layout_images,
+                    cell_size=2048,
+                    log=rv.log,
+                )
+            except Exception as e:
+                rv.log(f"UV Checker: Blender UV export failed - {e} (requires foreground mode)")
+            rv.timer_end("blender_uv_export")
+
         if tmp_dir:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         for img in uv_layout_images.values():
@@ -735,6 +895,9 @@ def main() -> None:
         raise
     finally:
         rv.close_log()
+        # Foreground mode: quit Blender automatically so the process doesn't hang
+        if config.get("foreground", False):
+            bpy.ops.wm.quit_blender()
 
 
 if __name__ == "__main__":

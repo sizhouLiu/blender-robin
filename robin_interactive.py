@@ -57,6 +57,7 @@ else:
 CYAN = "\033[36m"
 GREEN = "\033[32m"
 YELLOW = "\033[33m"
+RED = "\033[31m"
 WHITE = "\033[97m"
 DIM = "\033[90m"
 RESET = "\033[0m"
@@ -84,6 +85,7 @@ DEFAULT_CONFIG = {
     "animation_frame": None,
     "camera_json": "",
     "enable_log": True,
+    "export_blender_uv": False,
 }
 
 
@@ -102,6 +104,7 @@ def save_config(cfg):
 MAIN_MENU = [
     ("渲染图片", "render"),
     ("编辑配置", "config"),
+    ("重新选择文件夹", "change_dir"),
     ("退出", "exit"),
 ]
 
@@ -264,6 +267,8 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
             args.append("--no-seam-overlay")
         if not cfg.get("export_uv_layout", True):
             args.append("--no-uv-layout")
+        if cfg.get("export_blender_uv", False):
+            args.append("--blender-uv")
     if not cfg.get("enable_log", True):
         args.append("--no-log")
     if command == "wireframe":
@@ -292,6 +297,7 @@ def edit_config(cfg):
             (f"UV 风格: {cfg.get('uv_style', 'color_grid')}", "uv_style"),
             (f"接缝叠加: {'是' if cfg.get('enable_seam_overlay', True) else '否'}", "enable_seam_overlay"),
             (f"导出 UV Layout: {'是' if cfg.get('export_uv_layout', True) else '否'}", "export_uv_layout"),
+            (f"导出 Blender UV Layout (前台): {RED + '是 ⚠ 前台运行' + RESET if cfg.get('export_blender_uv', False) else '否'}", "export_blender_uv"),
             (f"线框模式: {cfg.get('wireframe_mode', 'clay')}", "wireframe_mode"),
             (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
@@ -397,6 +403,12 @@ def edit_config(cfg):
         elif key == "export_uv_layout":
             cfg["export_uv_layout"] = not cfg.get("export_uv_layout", True)
             print(f"\n  {GREEN}导出 UV Layout: {'已开启' if cfg['export_uv_layout'] else '已关闭'}{RESET}\n")
+
+        elif key == "export_blender_uv":
+            cfg["export_blender_uv"] = not cfg.get("export_blender_uv", False)
+            state = cfg["export_blender_uv"]
+            note = " (将以前台模式运行 Blender)" if state else ""
+            print(f"\n  {GREEN}导出 Blender UV Layout: {'已开启' if state else '已关闭'}{note}{RESET}\n")
 
         elif key == "wireframe_mode":
             modes = ["clay", "normal", "face_normal", "material"]
@@ -674,6 +686,7 @@ def main():
 
     # Main menu loop
     while True:
+        print(f"  文件夹: {WHITE}{directory}{RESET}\n")
         idx = select_menu("主菜单 (Esc 退出):", MAIN_MENU)
         if idx < 0:
             return
@@ -683,6 +696,10 @@ def main():
             do_render(blender, directory, res, cfg)
         elif action == "config":
             cfg = edit_config(cfg)
+            res = tuple(cfg.get("resolution", [1920, 1080]))
+        elif action == "change_dir":
+            directory = input_path("模型文件夹路径: ")
+            print()
         else:
             return
 
