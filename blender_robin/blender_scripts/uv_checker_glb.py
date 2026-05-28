@@ -520,38 +520,76 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
     return True
 
 
-def _group_objects_by_material(mesh_objects):
+def _material_has_basecolor_texture(mat):
+    """Check if material has a texture connected to Base Color (Principled BSDF) or Color (Emission)."""
+    if not mat or not mat.use_nodes:
+        return False
+
+    for node in mat.node_tree.nodes:
+        # Check Principled BSDF Base Color input
+        if node.type == 'BSDF_PRINCIPLED':
+            base_color_input = node.inputs.get('Base Color')
+            if base_color_input and base_color_input.links:
+                return True
+
+        # Check Emission Color input (for KHR_materials_unlit)
+        if node.type == 'EMISSION':
+            color_input = node.inputs.get('Color')
+            if color_input and color_input.links:
+                return True
+
+    return False
+
+
+def _group_objects_by_material(mesh_objects, require_basecolor=False, log=print):
     """Group mesh faces by material. Returns list of (mat_name, [(obj, face_index_set)]).
 
     A single mesh with multiple material slots is split into per-material face groups.
+    If require_basecolor=True, materials without a Base Color texture are skipped.
     """
     from collections import defaultdict
     groups = {}   # mat_name -> {obj -> set of face indices}
     order = []
+    skipped = []
+
+    def _should_include(mat):
+        if not require_basecolor:
+            return True
+        return _material_has_basecolor_texture(mat)
 
     for obj in mesh_objects:
         mats = obj.data.materials
         if not mats:
-            key = "__no_material__"
-            if key not in groups:
-                groups[key] = {}
-                order.append(key)
-            groups[key].setdefault(obj, None)  # None = all faces
+            if not require_basecolor:
+                key = "__no_material__"
+                if key not in groups:
+                    groups[key] = {}
+                    order.append(key)
+                groups[key].setdefault(obj, None)
+            else:
+                skipped.append(f"{obj.name}(no material)")
             continue
 
         # Single material slot: no need to filter by face index
         if len(mats) == 1:
-            key = mats[0].name if mats[0] else "__no_material__"
+            mat = mats[0]
+            if not _should_include(mat):
+                skipped.append(f"{obj.name}({mat.name if mat else 'None'})")
+                continue
+            key = mat.name if mat else "__no_material__"
             if key not in groups:
                 groups[key] = {}
                 order.append(key)
             groups[key].setdefault(obj, None)
             continue
 
-        # Multiple material slots: split faces by material_index
+        # Multiple material slots: split faces by material_index, skip faces with no basecolor
         face_sets = defaultdict(set)
         for poly in obj.data.polygons:
             mat = mats[poly.material_index] if poly.material_index < len(mats) else None
+            if not _should_include(mat):
+                skipped.append(f"{obj.name}:{poly.material_index}({mat.name if mat else 'None'})")
+                continue
             key = mat.name if mat else "__no_material__"
             face_sets[key].add(poly.index)
 
@@ -560,11 +598,15 @@ def _group_objects_by_material(mesh_objects):
                 groups[key] = {}
                 order.append(key)
             if obj in groups[key] and groups[key][obj] is None:
-                pass  # already marked as all-faces, leave it
+                pass
             elif obj in groups[key]:
                 groups[key][obj] |= face_set
             else:
                 groups[key][obj] = face_set
+
+    if skipped:
+        unique_skipped = list(dict.fromkeys(skipped))
+        log(f"UV Checker: skipped {len(unique_skipped)} material(s) without Base Color texture: {', '.join(unique_skipped[:5])}{'...' if len(unique_skipped) > 5 else ''}")
 
     # Convert to list of (mat_name, [(obj, face_filter), ...])
     result = []
@@ -797,7 +839,7 @@ def main() -> None:
             if style == "color_grid":
                 grid_img = load_color_grid_image(log=rv.log)
 
-            original_material_groups = _group_objects_by_material(uv_mesh_objects)
+            original_material_groups = _group_objects_by_material(uv_mesh_objects, require_basecolor=True, log=rv.log)
             rv.log(f"UV Checker: {len(original_material_groups)} material group(s) detected: "
                 + ", ".join(f"{k}({sum(1 for _ in v)})" for k, v in original_material_groups))
 
