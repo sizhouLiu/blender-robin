@@ -134,24 +134,59 @@ def hash_select_env_texture(model_id: str):
 # ── Model normalization ───────────────────────────────────────────────────
 
 def import_model(bpy, filepath):
-    """Import a model file. Supports .glb, .gltf, and .blend files."""
+    """Import a model file. Supports .glb, .gltf, .blend, .obj, .fbx, .dae, .abc, .usd, .usda, .usdc, .usdz, .ply, .stl, .x3d, .wrl files."""
     import os
 
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.object.delete(use_global=False)
 
     ext = os.path.splitext(filepath)[1].lower()
+
     if ext == ".blend":
-        # Append all objects from the .blend file into the current scene
         with bpy.data.libraries.load(filepath, link=False) as (data_from, data_to):
             data_to.objects = list(data_from.objects)
         for obj in data_to.objects:
             if obj is not None:
                 bpy.context.collection.objects.link(obj)
         log(f"Import: loaded .blend file {filepath} ({len(data_to.objects)} objects)")
-    else:
+    elif ext in (".glb", ".gltf"):
         bpy.ops.import_scene.gltf(filepath=filepath)
         log(f"Import: loaded {filepath}")
+    elif ext == ".obj":
+        try:
+            bpy.ops.wm.obj_import(filepath=filepath)
+        except AttributeError:
+            bpy.ops.import_scene.obj(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext == ".fbx":
+        bpy.ops.import_scene.fbx(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext == ".dae":
+        bpy.ops.wm.collada_import(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext in (".abc",):
+        bpy.ops.wm.alembic_import(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext in (".usd", ".usda", ".usdc", ".usdz"):
+        bpy.ops.wm.usd_import(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext == ".ply":
+        try:
+            bpy.ops.wm.ply_import(filepath=filepath)
+        except AttributeError:
+            bpy.ops.import_mesh.ply(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext == ".stl":
+        try:
+            bpy.ops.wm.stl_import(filepath=filepath)
+        except AttributeError:
+            bpy.ops.import_mesh.stl(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    elif ext in (".x3d", ".wrl"):
+        bpy.ops.import_scene.x3d(filepath=filepath)
+        log(f"Import: loaded {filepath}")
+    else:
+        raise ValueError(f"Import: unsupported file format '{ext}' for {filepath}")
 
 
 def _get_model_mesh_objects(bpy):

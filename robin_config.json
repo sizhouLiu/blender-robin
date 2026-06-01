@@ -21,5 +21,6 @@
   "animation_frame": 1,
   "delete_closeups": true,
   "camera_json": "",
-  "export_blender_uv": false
+  "export_blender_uv": false,
+  "zip_output": false
 }
