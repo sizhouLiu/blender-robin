@@ -232,7 +232,7 @@ def _build_script_options(glb_file, views, closeup_count, no_composite, delete_v
 @click.option("--uv-layout/--no-uv-layout", default=True, help="Export UV layout composite image.")
 @click.option("--blender-uv/--no-blender-uv", default=False, help="Export Blender built-in UV layout (requires foreground mode).")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -310,7 +310,7 @@ def uv_check(ctx: click.Context, directory: str, output: str, resolution: tuple[
 @click.option("--output", "-o", type=click.Path(), default="./rgb_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -386,7 +386,7 @@ def rgb_closeup(ctx: click.Context, directory: str, output: str, resolution: tup
               default="clay",
               help="Wireframe mode: 'material' = EEVEE shader; 'clay' = basic_1.exr MatCap + wireframe; 'normal' = check_normal+y.exr MatCap + wireframe; 'face_normal' = flat-shaded face normal colors + wireframe.")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -472,7 +472,7 @@ def wireframe(ctx: click.Context, directory: str, output: str, resolution: tuple
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @click.option("--matcap", type=str, default="basic_grey.exr", help="MatCap file name (e.g., basic_grey.exr, clay_brown.exr).")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -544,7 +544,7 @@ def clay(ctx: click.Context, directory: str, output: str, resolution: tuple[int,
 @click.option("--output", "-o", type=click.Path(), default="./normal_map_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -615,7 +615,7 @@ def normal_map(ctx: click.Context, directory: str, output: str, resolution: tupl
 @click.option("--output", "-o", type=click.Path(), default="./albedo_output", help="Output directory.")
 @click.option("--resolution", "-r", nargs=2, type=int, default=(1920, 1080), help="Width Height.")
 @_common_render_options
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel renders.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context
@@ -686,7 +686,7 @@ def albedo(ctx: click.Context, directory: str, output: str, resolution: tuple[in
 @click.option("--output", "-o", type=click.Path(), default="./normalized_output", help="Output directory.")
 @click.option("--target-size", type=float, default=2.0, show_default=True,
               help="Normalize longest axis to this size.")
-@click.option("--pattern", default="*.glb", help="Glob pattern for model files.")
+@click.option("--pattern", default="*.glb,*.gltf,*.obj,*.fbx,*.dae,*.usd,*.usda,*.usdc,*.usdz,*.ply,*.stl,*.blend", help="Glob pattern for model files.")
 @click.option("--parallel", "-j", default=1, type=int, help="Max parallel processes.")
 @click.option("--dry-run", is_flag=True, help="Print commands without executing.")
 @click.pass_context

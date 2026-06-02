@@ -86,11 +86,12 @@ DEFAULT_CONFIG = {
     "camera_json": "",
     "enable_log": True,
     "export_blender_uv": False,
-
     "bos_env_path": "",
     "bos_manifest": "",
     "bos_output_dir": "",
     "bos_limit": None,
+    "zip_output": True,
+
 }
 
 
@@ -312,6 +313,7 @@ def edit_config(cfg):
             (f"导出 Blender UV Layout (前台): {RED + '是 ⚠ 前台运行' + RESET if cfg.get('export_blender_uv', False) else '否'}", "export_blender_uv"),
             (f"线框模式: {cfg.get('wireframe_mode', 'clay')}", "wireframe_mode"),
             (f"输出格式: {cfg.get('output_format', 'PNG')}", "output_format"),
+            (f"渲染完成后压缩: {'是' if cfg.get('zip_output', True) else '否'}", "zip_output"),
             (f"HDR 环境贴图路径: {cfg.get('hdri_path', '(未设置)')}", "hdri_path"),
             (f"指定环境贴图: {cfg.get('env_texture', '(自动选择)')}", "env_texture"),
             (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
@@ -482,6 +484,10 @@ def edit_config(cfg):
             cfg["enable_log"] = not cfg.get("enable_log", True)
             print(f"\n  {GREEN}写入日志文件: {'已开启' if cfg['enable_log'] else '已关闭'}{RESET}\n")
 
+        elif key == "zip_output":
+            cfg["zip_output"] = not cfg.get("zip_output", True)
+            print(f"\n  {GREEN}渲染完成后压缩: {'已开启' if cfg['zip_output'] else '已关闭'}{RESET}\n")
+
 
 def clear_render_folders(base_output, commands):
     """Remove only the subfolders that are about to be re-rendered."""
@@ -600,12 +606,15 @@ def do_render(blender, directory, res, cfg, recursive=False):
     print(f"\n  {GREEN}全部完成!{RESET}")
     print(f"  输出目录: {WHITE}{base_output}{RESET}\n")
 
-    # Compress each rendered folder into its own zip
-    print(f"  {DIM}正在压缩...{RESET}", end="", flush=True)
-    zip_files = zip_render_folders(base_output, commands)
-    print(f"\r  {GREEN}已生成 {len(zip_files)} 个 zip:                     ")
-    for z in zip_files:
-        print(f"    {WHITE}{z.name}{RESET}")
+    # Compress each rendered folder into its own zip (if enabled)
+    if cfg.get("zip_output", True):
+        print(f"  {DIM}正在压缩...{RESET}", end="", flush=True)
+        zip_files = zip_render_folders(base_output, commands)
+        print(f"\r  {GREEN}已生成 {len(zip_files)} 个 zip:                     ")
+        for z in zip_files:
+            print(f"    {WHITE}{z.name}{RESET}")
+    else:
+        print(f"  {DIM}(已跳过压缩){RESET}")
 
     after_actions = [
         ("继续渲染", "again"),
