@@ -86,6 +86,11 @@ DEFAULT_CONFIG = {
     "camera_json": "",
     "enable_log": True,
     "export_blender_uv": False,
+
+    "bos_env_path": "",
+    "bos_manifest": "",
+    "bos_output_dir": "",
+    "bos_limit": None,
 }
 
 
@@ -103,6 +108,7 @@ def save_config(cfg):
 
 MAIN_MENU = [
     ("渲染图片", "render"),
+    ("从 BOS 拉取并渲染", "bos"),
     ("编辑配置", "config"),
     ("重新选择文件夹", "change_dir"),
     ("退出", "exit"),
@@ -209,7 +215,7 @@ def input_path(prompt):
         return p
 
 
-def run_render(command, directory, output_dir, resolution, blender_path, cfg):
+def run_render(command, directory, output_dir, resolution, blender_path, cfg, recursive=False):
     """Execute a robin render command."""
     from blender_robin.cli import cli
     views = cfg.get("views", [])
@@ -226,10 +232,16 @@ def run_render(command, directory, output_dir, resolution, blender_path, cfg):
     animation_frame = cfg.get("animation_frame", None)
     camera_json = cfg.get("camera_json", "")
 
-    # Always pass all supported model types; CLI handles comma-separated patterns
-    pattern = "*.glb,*.gltf,*.blend"
-    glb_count = len(list(directory.glob("*.glb"))) + len(list(directory.glob("*.gltf")))
-    blend_count = len(list(directory.glob("*.blend")))
+    # Always pass all supported model types; CLI handles comma-separated patterns.
+    # recursive=True 时使用 ** 递归匹配 (用于 BOS 下载的 {source}/{uuid}/{file} 嵌套结构)
+    if recursive:
+        pattern = "**/*.glb,**/*.gltf,**/*.blend"
+        glb_count = len(list(directory.rglob("*.glb"))) + len(list(directory.rglob("*.gltf")))
+        blend_count = len(list(directory.rglob("*.blend")))
+    else:
+        pattern = "*.glb,*.gltf,*.blend"
+        glb_count = len(list(directory.glob("*.glb"))) + len(list(directory.glob("*.gltf")))
+        blend_count = len(list(directory.glob("*.blend")))
     print(f"  {DIM}检测到: {glb_count} 个 GLB/GLTF, {blend_count} 个 BLEND → 使用模式: {pattern}{RESET}")
 
     args = [
@@ -510,7 +522,7 @@ def zip_render_folders(base_output, commands):
     return zip_files
 
 
-def do_render(blender, directory, res, cfg):
+def do_render(blender, directory, res, cfg, recursive=False):
     """Select render mode and execute."""
     selected = select_menu("选择渲染模式 (↑↓ 选择, Enter 确认, Esc 返回):", RENDER_MODES)
     if selected < 0:
@@ -545,7 +557,7 @@ def do_render(blender, directory, res, cfg):
         output_dir = base_output / folder
         label = next((name for name, c in RENDER_MODES if c == cmd), cmd)
         print(f"\n  {WHITE}▶ {label}{RESET}")
-        run_render(cmd, directory, output_dir, res, blender, cfg)
+        run_render(cmd, directory, output_dir, res, blender, cfg, recursive=recursive)
 
         src_global = directory / global_map[cmd]
         dst_global = output_dir / "global"
@@ -618,9 +630,107 @@ def do_render(blender, directory, res, cfg):
             print(f"\n  {GREEN}已打开文件夹{RESET}\n")
         elif action == "again":
             print()
-            return do_render(blender, directory, res, cfg)
+            return do_render(blender, directory, res, cfg, recursive=recursive)
         else:
             return
+
+
+def _input_file(prompt, default="", suffixes=None):
+    """Get an existing file path from user. Empty input keeps default if valid."""
+    while True:
+        hint = f"{DIM}(当前: {default}){RESET}" if default else ""
+        sys.stdout.write(f"{CYAN}{prompt}{RESET}{hint}\n")
+        sys.stdout.flush()
+        raw = input("  ").strip().strip('"').strip("'")
+        if not raw and default:
+            raw = default
+        if not raw:
+            print(f"  {YELLOW}请输入路径{RESET}")
+            continue
+        p = Path(raw)
+        if not p.is_file():
+            print(f"  {YELLOW}文件不存在: {raw}{RESET}")
+            continue
+        if suffixes and p.suffix.lower() not in suffixes:
+            print(f"  {YELLOW}需要 {'/'.join(suffixes)} 文件{RESET}")
+            continue
+        return p
+
+
+def do_bos_fetch(blender, res, cfg):
+    """从 BOS 按 manifest 下载模型, 然后递归渲染。"""
+    try:
+        from blender_robin import bos_fetch
+    except ImportError as e:
+        print(f"\n  {RED}无法加载 bos_fetch 模块: {e}{RESET}\n")
+        return
+
+    print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
+    print(f"  {WHITE}从 BOS 拉取并渲染{RESET}")
+    print(f"{BOLD}{CYAN}{'─' * 40}{RESET}\n")
+
+    # 1. .env 路径 (含 BOS 凭证)
+    default_env = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
+    env_path = _input_file("BOS .env 路径: ", default=default_env)
+    parsed = bos_fetch.load_bos_env(env_path)
+    if not all(parsed.get(k) for k in ("BOS_ENDPOINT", "BOS_ACCESS_KEY", "BOS_SECRET_KEY")):
+        print(f"\n  {RED}.env 缺少 BOS_ENDPOINT / BOS_ACCESS_KEY / BOS_SECRET_KEY{RESET}\n")
+        return
+    cfg["bos_env_path"] = str(env_path)
+    print(f"  {GREEN}已加载 BOS 凭证: {parsed['BOS_ENDPOINT']}{RESET}\n")
+
+    # 2. manifest JSONL 路径
+    manifest = _input_file(
+        "manifest 文件路径 (JSONL, 每行含 uuid/old_bucket/old_oss_path/source): ",
+        default=cfg.get("bos_manifest", ""),
+        suffixes={".jsonl", ".json", ".txt"},
+    )
+    cfg["bos_manifest"] = str(manifest)
+
+    # 3. 下载输出目录
+    default_out = cfg.get("bos_output_dir", "") or str(manifest.parent / "bos_models")
+    sys.stdout.write(f"\n{CYAN}下载输出目录 {DIM}(回车用默认: {default_out}){RESET}\n")
+    sys.stdout.flush()
+    raw_out = input("  ").strip().strip('"').strip("'")
+    output_dir = Path(raw_out) if raw_out else Path(default_out)
+    cfg["bos_output_dir"] = str(output_dir)
+
+    # 4. limit
+    sys.stdout.write(f"\n{CYAN}下载条数上限 {DIM}(回车=全部){RESET}\n")
+    sys.stdout.flush()
+    raw_limit = input("  ").strip()
+    limit = int(raw_limit) if raw_limit.isdigit() and int(raw_limit) > 0 else None
+    cfg["bos_limit"] = limit
+    save_config(cfg)
+
+    # 5. 下载
+    mapping_file = output_dir / "downloaded_model_mapping.jsonl"
+    print(f"\n  {WHITE}开始下载 → {output_dir}{RESET}")
+    print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
+    try:
+        stats = bos_fetch.download_manifest(
+            manifest=manifest,
+            output_base=output_dir,
+            limit=limit,
+            mapping_file=mapping_file,
+            log=lambda msg: print(f"  {DIM}{msg}{RESET}"),
+        )
+    except Exception as e:
+        print(f"\n  {RED}下载失败: {e}{RESET}\n")
+        return
+
+    print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
+    print(f"  {GREEN}下载完成: 成功={stats['success']} 跳过={stats['skipped']} "
+          f"失败={stats['failed']} (共处理 {stats['processed']}){RESET}")
+    print(f"  mapping: {WHITE}{mapping_file}{RESET}\n")
+
+    if stats["success"] == 0:
+        print(f"  {YELLOW}没有成功下载的模型, 跳过渲染{RESET}\n")
+        return
+
+    # 6. 递归渲染下载目录
+    print(f"  {WHITE}进入渲染流程 (递归扫描 {output_dir}){RESET}")
+    do_render(blender, output_dir, res, cfg, recursive=True)
 
 
 def main():
@@ -694,6 +804,8 @@ def main():
         if action == "render":
             print()
             do_render(blender, directory, res, cfg)
+        elif action == "bos":
+            do_bos_fetch(blender, res, cfg)
         elif action == "config":
             cfg = edit_config(cfg)
             res = tuple(cfg.get("resolution", [1920, 1080]))

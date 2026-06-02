@@ -75,6 +75,36 @@ Blender: D:\Blender\blender.exe
 - 按 Enter 确认
 - 输入分辨率（可选，直接回车使用默认 1920x1080）
 
+### 从 BOS 拉取并渲染
+
+交互式启动器主菜单提供「**从 BOS 拉取并渲染**」选项，可直接从百度对象存储 (BOS)
+按 manifest 批量下载模型，下载完成后自动进入渲染流程（递归扫描嵌套目录）。
+
+**前置条件：在项目根目录创建 `.env` 文件**
+
+```env
+BOS_ENDPOINT="https://xxx.bcebos.com"
+BOS_ACCESS_KEY="your_access_key"
+BOS_SECRET_KEY="your_secret_key"
+```
+
+**manifest 文件格式（JSON Lines，每行一个模型）：**
+
+```json
+{"uuid": "xxx-xxx", "old_bucket": "bucket_name", "old_oss_path": "path/to/model.glb", "source": "objaverse-xl"}
+```
+
+**操作流程：**
+1. 主菜单选择「从 BOS 拉取并渲染」
+2. 依次指定：`.env` 路径 → manifest(JSONL) 路径 → 下载输出目录 → 下载条数上限（回车=全部）
+3. 模型下载到 `{输出目录}/{source}/{uuid}/{文件名}`，并生成 `downloaded_model_mapping.jsonl`
+4. 对 `gltf/obj/dae/fbx` 会自动同捆下载依赖文件（贴图等）
+5. 支持断点续传：本地已存在的文件自动跳过
+6. 下载完成后自动递归扫描该目录并进入渲染模式选择
+
+> 依赖 `bce-python-sdk`（BOS SDK）与 `python-dotenv`，已在 `pyproject.toml` 声明。
+> 若手动安装：`uv pip install bce-python-sdk python-dotenv`（或 `pip install -e .`）。
+
 ### 命令行方式
 
 如果需要脚本化或批处理，可以直接使用命令行：
