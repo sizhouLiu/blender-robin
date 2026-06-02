@@ -2,6 +2,7 @@
 Robin Interactive - 交互式渲染启动器
 用法: python robin_interactive.py
 """
+import argparse
 import json
 import os
 import sys
@@ -174,10 +175,47 @@ def select_menu(title, options):
             return -1
 
 
+def _has_gui():
+    """Whether a GUI file dialog / file manager can run on this platform."""
+    if sys.platform in ("win32", "darwin"):
+        return True
+    # Linux/other: a display server must be present (X11 or Wayland)
+    return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def _open_folder(path):
+    """Open a folder in the OS file manager. Returns False if not possible."""
+    path = str(path)
+    try:
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            import subprocess
+            subprocess.run(["open", path])
+        else:
+            if not _has_gui():
+                return False
+            import subprocess
+            result = subprocess.run(
+                ["xdg-open", path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            if result.returncode != 0:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def select_folder():
-    """Open Windows folder picker dialog."""
-    import tkinter as tk
-    from tkinter import filedialog
+    """Open a GUI folder picker dialog. Returns '' if no GUI is available."""
+    if not _has_gui():
+        return ""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        return ""
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)
@@ -188,14 +226,19 @@ def select_folder():
 
 def input_path(prompt):
     """Get a directory path from user with validation."""
+    gui = _has_gui()
     while True:
-        sys.stdout.write(f"{CYAN}{prompt}{RESET}{DIM}(直接回车打开文件夹选择器){RESET}\n")
+        hint = f"{DIM}(直接回车打开文件夹选择器){RESET}" if gui else ""
+        sys.stdout.write(f"{CYAN}{prompt}{RESET}{hint}\n")
         sys.stdout.flush()
         path = input("  ").strip().strip('"').strip("'")
         if not path:
             path = select_folder()
             if not path:
-                print(f"  {YELLOW}未选择文件夹{RESET}")
+                if gui:
+                    print(f"  {YELLOW}未选择文件夹{RESET}")
+                else:
+                    print(f"  {YELLOW}请输入文件夹路径{RESET}")
                 continue
             print(f"  {WHITE}{path}{RESET}")
         p = Path(path)
@@ -628,15 +671,11 @@ def do_render(blender, directory, res, cfg, recursive=False):
             return
         _, action = after_actions[action_idx]
         if action == "open":
-            if sys.platform == "win32":
-                os.startfile(str(base_output))
-            elif sys.platform == "darwin":
-                import subprocess
-                subprocess.run(["open", str(base_output)])
+            if _open_folder(base_output):
+                print(f"\n  {GREEN}已打开文件夹{RESET}\n")
             else:
-                import subprocess
-                subprocess.run(["xdg-open", str(base_output)])
-            print(f"\n  {GREEN}已打开文件夹{RESET}\n")
+                print(f"\n  {YELLOW}无法打开文件管理器，输出目录:{RESET}")
+                print(f"  {WHITE}{base_output}{RESET}\n")
         elif action == "again":
             print()
             return do_render(blender, directory, res, cfg, recursive=recursive)
@@ -743,6 +782,18 @@ def do_bos_fetch(blender, res, cfg):
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Robin 交互式渲染启动器",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["local", "bos"],
+        default=None,
+        help="启动模式: local=本地渲染 (需要模型文件夹), bos=从 BOS 拉取并渲染 (不需要本地文件夹)",
+    )
+    args = parser.parse_args()
+
     enable_ansi()
 
     print(f"\n{BOLD}{CYAN}{'=' * 40}{RESET}")
@@ -796,12 +847,22 @@ def main():
 
     print(f"  Blender: {GREEN}{blender}{RESET}\n")
 
-    # Input directory
-    directory = input_path("模型文件夹路径: ")
-    print()
-
     res = tuple(cfg.get("resolution", [1920, 1080]))
     print(f"  分辨率: {WHITE}{res[0]} x {res[1]}{RESET}\n")
+
+    # Mode-based flow: if --mode is provided, skip menu and run directly
+    if args.mode == "bos":
+        do_bos_fetch(blender, res, cfg)
+        return
+    elif args.mode == "local":
+        directory = input_path("模型文件夹路径: ")
+        print()
+        do_render(blender, directory, res, cfg)
+        return
+
+    # Interactive menu mode (no --mode flag)
+    directory = input_path("模型文件夹路径: ")
+    print()
 
     # Main menu loop
     while True:
