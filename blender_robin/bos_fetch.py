@@ -236,8 +236,9 @@ def download_manifest(
                     continue
 
                 uuid = item.get("uuid")
-                bucket = item.get("old_bucket")
-                bos_path = item.get("old_oss_path")
+                # 兼容两种字段名: bucket/bos_uri (新) 和 old_bucket/old_oss_path (旧)
+                bucket = item.get("bucket") or item.get("old_bucket")
+                bos_path = item.get("bos_uri") or item.get("old_oss_path")
                 source = item.get("source", "unknown")
 
                 if bos_path and _is_mac_junk(bos_path):
