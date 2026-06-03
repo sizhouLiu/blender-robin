@@ -305,3 +305,150 @@ def _print_progress(stats: dict, log: Callable[[str], None]) -> None:
         f"进度: 已处理={stats['processed']} | 成功={stats['success']} | "
         f"跳过={stats['skipped']} | 失败={stats['failed']}"
     )
+
+
+def download_manifest_batched(
+    manifest: str | os.PathLike,
+    output_base: str | os.PathLike,
+    batch_size: int = 10,
+    limit: Optional[int] = None,
+    mapping_file: Optional[str | os.PathLike] = None,
+    skip_existing: bool = True,
+    log: Callable[[str], None] = print,
+):
+    """流式下载: 每 batch_size 个模型下载完 yield (batch_dir, batch_stats)。
+
+    每批文件下载到独立子目录 {output_base}/batch_001/, batch_002/ ...
+    调用方可在每次 yield 后立即启动渲染，下载与渲染交替进行。
+
+    Yields:
+        (batch_dir: Path, stats: dict)
+            batch_dir  — 本批文件所在子目录（直接传给 do_render）
+            stats      — 当前累计统计快照
+    """
+    import pathlib
+    _require_bos_env()
+    manifest = str(manifest)
+    output_base = str(output_base)
+    if not os.path.exists(manifest):
+        raise FileNotFoundError(f"manifest 文件不存在: {manifest}")
+
+    client = BOSClient()
+    if mapping_file:
+        os.makedirs(os.path.dirname(str(mapping_file)) or ".", exist_ok=True)
+        mapping_fp = open(mapping_file, "a", encoding="utf-8")
+    else:
+        mapping_fp = None
+
+    stats = {"output_base": output_base, "processed": 0,
+             "success": 0, "skipped": 0, "failed": 0}
+
+    def _record(uuid, source, local, bucket, bos_path, status, reason=""):
+        if mapping_fp is None:
+            return
+        mapping_fp.write(json.dumps({
+            "uuid": uuid, "source": source, "local_path": local,
+            "bucket": bucket, "bos_path": bos_path,
+            "status": status, "reason": reason,
+        }, ensure_ascii=False) + "\n")
+        mapping_fp.flush()
+
+    batch_num = 0
+    batch_count = 0  # files collected in current batch
+    current_batch_dir = None
+
+    def _next_batch_dir():
+        nonlocal batch_num, batch_count, current_batch_dir
+        batch_num += 1
+        batch_count = 0
+        current_batch_dir = pathlib.Path(output_base) / f"batch_{batch_num:03d}"
+        current_batch_dir.mkdir(parents=True, exist_ok=True)
+        return current_batch_dir
+
+    _next_batch_dir()
+
+    try:
+        with open(manifest, "r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                if limit and stats["processed"] >= limit:
+                    break
+
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError as e:
+                    log(f"第 {line_num} 行 JSON 解析失败: {e}")
+                    continue
+
+                uuid = item.get("uuid")
+                bucket = item.get("bucket") or item.get("old_bucket")
+                bos_path = item.get("bos_uri") or item.get("old_oss_path")
+                source = item.get("source", "unknown")
+
+                if bos_path and _is_mac_junk(bos_path):
+                    stats["processed"] += 1
+                    stats["skipped"] += 1
+                    _record(uuid or "", source, "", bucket or "",
+                            bos_path or "", "skipped", "macOS 隐藏文件")
+                    continue
+
+                if bos_path and re.search(r"u[0-9a-fA-F]{4}", bos_path):
+                    bos_path = decode_unicode_escapes(bos_path)
+
+                if not uuid or not bucket or not bos_path:
+                    stats["processed"] += 1
+                    stats["failed"] += 1
+                    _record(uuid or "", source, "", bucket or "",
+                            bos_path or "", "failed", "缺少必要字段")
+                    log(f"第 {line_num} 行缺少必要字段, 跳过")
+                    continue
+
+                # 每批放到各自子目录: batch_001/{uuid}/{文件名}
+                file_name = os.path.basename(bos_path) or f"{uuid}.unknown"
+                local = str(current_batch_dir / uuid / file_name)
+
+                if skip_existing and os.path.exists(local) and os.path.getsize(local) > 0:
+                    stats["processed"] += 1
+                    stats["success"] += 1
+                    _record(uuid, source, local, bucket, bos_path, "success", "本地已存在")
+                    batch_count += 1
+                else:
+                    os.makedirs(os.path.dirname(local), exist_ok=True)
+                    try:
+                        client.get_file(bos_bucket=bucket, bos_path=bos_path, file_path=local)
+                        ok = os.path.exists(local) and os.path.getsize(local) > 0
+                    except Exception as e:
+                        log(f"下载失败 {bucket}/{bos_path}: {e}")
+                        ok = False
+
+                    stats["processed"] += 1
+                    if ok:
+                        stats["success"] += 1
+                        ext = os.path.splitext(bos_path)[1].lstrip(".").lower()
+                        if ext in FORMATS_WITH_DEPENDENCIES:
+                            n = _download_sibling_files(
+                                client, bucket, bos_path,
+                                os.path.dirname(local), log)
+                            if n:
+                                log(f"  额外下载 {n} 个依赖文件 ({ext})")
+                        _record(uuid, source, local, bucket, bos_path, "success")
+                        batch_count += 1
+                    else:
+                        stats["failed"] += 1
+                        if os.path.exists(local) and os.path.getsize(local) == 0:
+                            os.remove(local)
+                        _record(uuid, source, "", bucket, bos_path, "failed", "下载失败")
+
+                if batch_count >= batch_size:
+                    yield (current_batch_dir, stats.copy())
+                    _next_batch_dir()
+
+        # yield 最后一批（不足 batch_size 的余量）
+        if batch_count > 0:
+            yield (current_batch_dir, stats.copy())
+
+    finally:
+        if mapping_fp is not None:
+            mapping_fp.close()

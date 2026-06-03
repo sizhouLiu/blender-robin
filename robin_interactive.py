@@ -91,6 +91,8 @@ DEFAULT_CONFIG = {
     "bos_manifest": "",
     "bos_output_dir": "",
     "bos_limit": None,
+    "bos_batch_size": 10,
+    "bos_delete_after_render": False,
     "zip_output": True,
 
 }
@@ -749,36 +751,83 @@ def do_bos_fetch(blender, res, cfg):
     raw_limit = input("  ").strip()
     limit = int(raw_limit) if raw_limit.isdigit() and int(raw_limit) > 0 else None
     cfg["bos_limit"] = limit
+
+    # 5. batch size
+    sys.stdout.write(f"\n{CYAN}每批下载数量 {DIM}(回车={cfg.get('bos_batch_size', 10)}){RESET}\n")
+    sys.stdout.flush()
+    raw_batch = input("  ").strip()
+    batch_size = int(raw_batch) if raw_batch.isdigit() and int(raw_batch) > 0 else cfg.get("bos_batch_size", 10)
+    cfg["bos_batch_size"] = batch_size
+
+    # 6. 渲染后删除模型文件
+    default_delete = cfg.get("bos_delete_after_render", False)
+    default_hint = "Y/n" if default_delete else "y/N"
+    sys.stdout.write(f"\n{CYAN}渲染后删除批次模型文件? {DIM}({default_hint}, 回车=保持默认){RESET}\n")
+    sys.stdout.flush()
+    raw_delete = input("  ").strip().lower()
+    if raw_delete in ("y", "yes"):
+        delete_after_render = True
+    elif raw_delete in ("n", "no"):
+        delete_after_render = False
+    else:
+        delete_after_render = default_delete
+    cfg["bos_delete_after_render"] = delete_after_render
     save_config(cfg)
 
-    # 5. 下载
+    if delete_after_render:
+        print(f"  {YELLOW}已开启: 渲染完每批后删除模型文件（节省磁盘）{RESET}")
+    else:
+        print(f"  {DIM}已关闭: 模型文件渲染后保留{RESET}")
+
+    # 7. 流式下载 + 渲染
     mapping_file = output_dir / "downloaded_model_mapping.jsonl"
-    print(f"\n  {WHITE}开始下载 → {output_dir}{RESET}")
+    print(f"\n  {WHITE}开始流式下载 (每批 {batch_size} 个) → {output_dir}{RESET}")
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
+
+    total_batches = 0
+    final_stats = {"processed": 0, "success": 0, "skipped": 0, "failed": 0}
     try:
-        stats = bos_fetch.download_manifest(
+        for batch_dir, stats in bos_fetch.download_manifest_batched(
             manifest=manifest,
             output_base=output_dir,
+            batch_size=batch_size,
             limit=limit,
             mapping_file=mapping_file,
             log=lambda msg: print(f"  {DIM}{msg}{RESET}"),
-        )
+        ):
+            total_batches += 1
+            final_stats = stats
+            batch_success = len(list(batch_dir.rglob("*.glb")) +
+                                list(batch_dir.rglob("*.gltf")) +
+                                list(batch_dir.rglob("*.blend")))
+            print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
+            print(f"  {GREEN}批次 {total_batches} 下载完成: {batch_dir.name} "
+                  f"({batch_success} 个模型){RESET}")
+            print(f"  {DIM}累计: 已处理={stats['processed']} 成功={stats['success']} "
+                  f"失败={stats['failed']}{RESET}\n")
+
+            if batch_success > 0:
+                print(f"  {WHITE}渲染批次 {total_batches} → {batch_dir}{RESET}")
+                do_render(blender, batch_dir, res, cfg, recursive=True)
+                if delete_after_render:
+                    import shutil
+                    shutil.rmtree(batch_dir, ignore_errors=True)
+                    print(f"  {DIM}已删除 {batch_dir.name}{RESET}\n")
+            else:
+                print(f"  {YELLOW}批次 {total_batches} 无可渲染文件，跳过{RESET}\n")
+                if delete_after_render:
+                    import shutil
+                    shutil.rmtree(batch_dir, ignore_errors=True)
+
     except Exception as e:
-        print(f"\n  {RED}下载失败: {e}{RESET}\n")
+        print(f"\n  {RED}流程中断: {e}{RESET}\n")
         return
 
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
-    print(f"  {GREEN}下载完成: 成功={stats['success']} 跳过={stats['skipped']} "
-          f"失败={stats['failed']} (共处理 {stats['processed']}){RESET}")
+    print(f"  {GREEN}全部完成: 共 {total_batches} 批, "
+          f"成功={final_stats['success']} 跳过={final_stats['skipped']} "
+          f"失败={final_stats['failed']} (共处理 {final_stats['processed']}){RESET}")
     print(f"  mapping: {WHITE}{mapping_file}{RESET}\n")
-
-    if stats["success"] == 0:
-        print(f"  {YELLOW}没有成功下载的模型, 跳过渲染{RESET}\n")
-        return
-
-    # 6. 递归渲染下载目录
-    print(f"  {WHITE}进入渲染流程 (递归扫描 {output_dir}){RESET}")
-    do_render(blender, output_dir, res, cfg, recursive=True)
 
 
 def main():
