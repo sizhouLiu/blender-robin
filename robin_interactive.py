@@ -896,17 +896,10 @@ def do_bos_fetch(blender, res, cfg):
     limit = int(raw_limit) if raw_limit.isdigit() and int(raw_limit) > 0 else None
     cfg["bos_limit"] = limit
 
-    # 5. batch size
-    sys.stdout.write(f"\n{CYAN}每批下载数量 {DIM}(回车={cfg.get('bos_batch_size', 10)}){RESET}\n")
-    sys.stdout.flush()
-    raw_batch = input("  ").strip()
-    batch_size = int(raw_batch) if raw_batch.isdigit() and int(raw_batch) > 0 else cfg.get("bos_batch_size", 10)
-    cfg["bos_batch_size"] = batch_size
-
-    # 6. 渲染后删除模型文件
+    # 5. 渲染后删除模型文件
     default_delete = cfg.get("bos_delete_after_render", False)
     default_hint = "Y/n" if default_delete else "y/N"
-    sys.stdout.write(f"\n{CYAN}渲染后删除批次模型文件? {DIM}({default_hint}, 回车=保持默认){RESET}\n")
+    sys.stdout.write(f"\n{CYAN}渲染后删除模型文件? {DIM}({default_hint}, 回车=保持默认){RESET}\n")
     sys.stdout.flush()
     raw_delete = input("  ").strip().lower()
     if raw_delete in ("y", "yes"):
@@ -918,84 +911,57 @@ def do_bos_fetch(blender, res, cfg):
     cfg["bos_delete_after_render"] = delete_after_render
     save_config(cfg)
 
-    if delete_after_render:
-        print(f"  {YELLOW}已开启: 渲染完每批后删除模型文件（节省磁盘）{RESET}")
-    else:
-        print(f"  {DIM}已关闭: 模型文件渲染后保留{RESET}")
-
-    # 7. 流式下载 + 渲染
-    upload_bucket = cfg.get("bos_upload_bucket", "").strip()
-    upload_prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
-    pfs_output_dir = cfg.get("pfs_output_dir", "").strip()
-    if upload_bucket:
-        print(f"  {DIM}渲染结果将上传至: {upload_bucket}/{upload_prefix}/{{batch}}/{RESET}")
-    if pfs_output_dir:
-        print(f"  {DIM}渲染结果将同步到 PFS: {pfs_output_dir}/{{uuid}}/{RESET}")
-    if not upload_bucket and not pfs_output_dir:
-        print(f"  {DIM}未配置 BOS bucket 或 PFS 目录，渲染结果仅保留本地{RESET}")
-
+    # 6. 全量下载
     mapping_file = output_dir / "downloaded_model_mapping.jsonl"
-    print(f"\n  {WHITE}开始流式下载 (每批 {batch_size} 个) → {output_dir}{RESET}")
+    print(f"\n  {WHITE}开始下载 → {output_dir}{RESET}")
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
-
-    total_batches = 0
-    final_stats = {"processed": 0, "success": 0, "skipped": 0, "failed": 0}
     try:
-        for batch_dir, stats in bos_fetch.download_manifest_batched(
+        stats = bos_fetch.download_manifest(
             manifest=manifest,
             output_base=output_dir,
-            batch_size=batch_size,
             limit=limit,
             mapping_file=mapping_file,
             log=lambda msg: print(f"  {DIM}{msg}{RESET}"),
-        ):
-            total_batches += 1
-            final_stats = stats
-            batch_success = len(list(batch_dir.rglob("*.glb")) +
-                                list(batch_dir.rglob("*.gltf")) +
-                                list(batch_dir.rglob("*.blend")))
-            print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
-            print(f"  {GREEN}批次 {total_batches} 下载完成: {batch_dir.name} "
-                  f"({batch_success} 个模型){RESET}")
-            print(f"  {DIM}累计: 已处理={stats['processed']} 成功={stats['success']} "
-                  f"失败={stats['failed']}{RESET}\n")
-
-            if batch_success > 0:
-                print(f"  {WHITE}渲染批次 {total_batches} → {batch_dir}{RESET}")
-                do_render(blender, batch_dir, res, cfg, recursive=True)
-
-                # 上传渲染结果到 BOS
-                if upload_bucket:
-                    _upload_render_results(
-                        batch_dir=batch_dir,
-                        bucket=upload_bucket,
-                        prefix=f"{upload_prefix}/{batch_dir.name}",
-                        env_path=str(env_path),
-                    )
-
-                # 复制渲染结果到 PFS（按 uuid 组织）
-                if pfs_output_dir:
-                    _copy_render_results_to_pfs(batch_dir, pfs_output_dir)
-
-                if delete_after_render:
-                    import shutil
-                    shutil.rmtree(batch_dir, ignore_errors=True)
-                    print(f"  {DIM}已删除 {batch_dir.name}{RESET}\n")
-            else:
-                print(f"  {YELLOW}批次 {total_batches} 无可渲染文件，跳过{RESET}\n")
-                if delete_after_render:
-                    import shutil
-                    shutil.rmtree(batch_dir, ignore_errors=True)
-
+        )
     except Exception as e:
-        print(f"\n  {RED}流程中断: {e}{RESET}\n")
+        print(f"\n  {RED}下载失败: {e}{RESET}\n")
         return
 
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
-    print(f"  {GREEN}全部完成: 共 {total_batches} 批, "
-          f"成功={final_stats['success']} 跳过={final_stats['skipped']} "
-          f"失败={final_stats['failed']} (共处理 {final_stats['processed']}){RESET}")
+    print(f"  {GREEN}下载完成: 成功={stats['success']} 跳过={stats['skipped']} "
+          f"失败={stats['failed']} (共处理 {stats['processed']}){RESET}")
     print(f"  mapping: {WHITE}{mapping_file}{RESET}\n")
+
+    if stats["success"] == 0:
+        print(f"  {YELLOW}没有成功下载的模型, 跳过渲染{RESET}\n")
+        return
+
+    # 7. 递归渲染
+    upload_bucket = cfg.get("bos_upload_bucket", "").strip()
+    upload_prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+    pfs_output_dir = cfg.get("pfs_output_dir", "").strip()
+
+    print(f"  {WHITE}进入渲染流程 (递归扫描 {output_dir}){RESET}")
+    do_render(blender, output_dir, res, cfg, recursive=True)
+
+    if upload_bucket:
+        _upload_render_results(
+            batch_dir=output_dir,
+            bucket=upload_bucket,
+            prefix=upload_prefix,
+            env_path=str(env_path),
+        )
+
+    if pfs_output_dir:
+        _copy_render_results_to_pfs(output_dir, pfs_output_dir)
+
+    if delete_after_render:
+        import shutil
+        # 只删模型文件，保留渲染输出
+        for d in output_dir.iterdir():
+            if d.is_dir() and d.name not in ("robin_output",):
+                shutil.rmtree(d, ignore_errors=True)
+        print(f"  {DIM}已删除模型文件{RESET}\n")
 
 
 def main():

@@ -176,8 +176,8 @@ def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0
         uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width,  0, width  - 1)
         uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
 
-        for x0, y0, x1, y1 in uv_edges.astype(int):
-            _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color)
+        # Vectorized batch drawing
+        _draw_lines_batch_vectorized(canvas, uv_edges.astype(int), width, height, color, thickness=3)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
@@ -301,6 +301,52 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0
     else:
         mask = (pts[:, 0] >= 0) & (pts[:, 0] < height) & (pts[:, 1] >= 0) & (pts[:, 1] < width)
         canvas[pts[mask, 0], pts[mask, 1]] = color
+
+
+def _draw_lines_batch_vectorized(canvas, edges, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3):
+    """Vectorized batch drawing of all lines. Much faster than loop over _draw_line_numpy.
+
+    edges: numpy array of shape (N, 4) containing [x0, y0, x1, y1] per line.
+    """
+    import numpy as np
+
+    if len(edges) == 0:
+        return
+
+    # For each line, sample points along it using linspace
+    # Use a fixed number of samples per line proportional to its length
+    x0, y0, x1, y1 = edges[:, 0], edges[:, 1], edges[:, 2], edges[:, 3]
+    lengths = np.maximum(np.abs(x1 - x0), np.abs(y1 - y0)).astype(int) + 1
+
+    # To avoid huge memory, cap samples per line
+    max_samples = min(int(np.max(lengths)) + 1, 200)
+
+    all_xs = []
+    all_ys = []
+
+    for i in range(len(edges)):
+        n = min(lengths[i], max_samples)
+        if n < 2:
+            n = 2
+        ts = np.linspace(0, 1, n)
+        xs = (x0[i] + ts * (x1[i] - x0[i])).astype(int)
+        ys = (y0[i] + ts * (y1[i] - y0[i])).astype(int)
+        all_xs.append(xs)
+        all_ys.append(ys)
+
+    xs = np.concatenate(all_xs)
+    ys = np.concatenate(all_ys)
+
+    # Apply thickness
+    if thickness > 1:
+        offsets = np.arange(thickness) - thickness // 2
+        xs_thick = (xs[:, None] + offsets).ravel()
+        ys_thick = np.repeat(ys, thickness)
+        mask = (ys_thick >= 0) & (ys_thick < height) & (xs_thick >= 0) & (xs_thick < width)
+        canvas[ys_thick[mask], xs_thick[mask]] = color
+    else:
+        mask = (ys >= 0) & (ys < height) & (xs >= 0) & (xs < width)
+        canvas[ys[mask], xs[mask]] = color
 
 
 def create_per_mesh_material(obj, uv_layout_img, grid_img=None, checker_scale=None):
@@ -508,8 +554,8 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
 
     arr = np.clip(arr, 0, [width-1, height-1, width-1, height-1])
 
-    for x0, y0, x1, y1 in arr.astype(int):
-        _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color, thickness)
+    # Vectorized batch drawing (much faster than loop)
+    _draw_lines_batch_vectorized(canvas, arr.astype(int), width, height, color, thickness)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
@@ -886,6 +932,9 @@ def main() -> None:
             samples = config.get("samples")
             if samples is not None:
                 scene.eevee.taa_render_samples = samples
+            else:
+                # UV checker doesn't need high-quality AA, use minimum samples for speed
+                scene.eevee.taa_render_samples = 1
 
         rv.setup_white_world(scene)
 
