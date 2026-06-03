@@ -93,6 +93,9 @@ DEFAULT_CONFIG = {
     "bos_limit": None,
     "bos_batch_size": 10,
     "bos_delete_after_render": False,
+    "bos_upload_bucket": "",
+    "bos_upload_prefix": "robin_renders",
+    "pfs_output_dir": "/mnt/pfs/users/sizhou",
     "zip_output": True,
 
 }
@@ -364,6 +367,9 @@ def edit_config(cfg):
             (f"导出元数据 (meta.json): {'是' if cfg.get('export_metadata', False) else '否'}", "export_metadata"),
             (f"相机参考文件: {cfg.get('camera_json', '(不指定)') or '(不指定)'}", "camera_json"),
             (f"写入日志文件: {'是' if cfg.get('enable_log', True) else '否'}", "enable_log"),
+            (f"BOS 上传 bucket: {cfg.get('bos_upload_bucket', '(未设置)') or '(未设置)'}", "bos_upload_bucket"),
+            (f"BOS 上传前缀: {cfg.get('bos_upload_prefix', 'robin_renders')}", "bos_upload_prefix"),
+            (f"PFS 输出目录: {cfg.get('pfs_output_dir', '/mnt/pfs/users/sizhou')}", "pfs_output_dir"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
         ]
@@ -532,6 +538,32 @@ def edit_config(cfg):
         elif key == "zip_output":
             cfg["zip_output"] = not cfg.get("zip_output", True)
             print(f"\n  {GREEN}渲染完成后压缩: {'已开启' if cfg['zip_output'] else '已关闭'}{RESET}\n")
+
+        elif key == "bos_upload_bucket":
+            cur = cfg.get("bos_upload_bucket", "")
+            sys.stdout.write(f"\n  {CYAN}BOS 上传 bucket (当前: {cur or '(未设置)'}, 留空清除): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            cfg["bos_upload_bucket"] = raw
+            print(f"  {GREEN}已更新{RESET}\n")
+
+        elif key == "bos_upload_prefix":
+            cur = cfg.get("bos_upload_prefix", "robin_renders")
+            sys.stdout.write(f"\n  {CYAN}BOS 上传路径前缀 (当前: {cur}): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip()
+            if raw:
+                cfg["bos_upload_prefix"] = raw
+                print(f"  {GREEN}已更新{RESET}\n")
+
+        elif key == "pfs_output_dir":
+            cur = cfg.get("pfs_output_dir", "/mnt/pfs/users/sizhou")
+            sys.stdout.write(f"\n  {CYAN}PFS 输出目录 (当前: {cur}): {RESET}")
+            sys.stdout.flush()
+            raw = input().strip().strip('"').strip("'")
+            if raw:
+                cfg["pfs_output_dir"] = raw
+                print(f"  {GREEN}已更新{RESET}\n")
 
 
 def clear_render_folders(base_output, commands):
@@ -707,6 +739,118 @@ def _input_file(prompt, default="", suffixes=None):
         return p
 
 
+def _copy_render_results_to_pfs(batch_dir: Path, pfs_output_dir: str):
+    """Copy render results from batch_dir/robin_output to {pfs_output_dir}/{uuid}/.
+
+    Mapping: case_001 → 1st model uuid, case_002 → 2nd model uuid, etc.
+    Model files are at batch_dir/{uuid}/{filename}.
+    """
+    import shutil
+
+    robin_output = batch_dir / "robin_output"
+    if not robin_output.exists():
+        print(f"  {DIM}无 robin_output 目录，跳过复制到 PFS{RESET}")
+        return
+
+    # Collect uuid subdirs sorted by name (same order as rendering enumeration)
+    uuid_dirs = sorted([d for d in batch_dir.iterdir()
+                        if d.is_dir() and d.name not in ("robin_output",)])
+
+    if not uuid_dirs:
+        print(f"  {DIM}批次目录无模型子目录，跳过复制到 PFS{RESET}")
+        return
+
+    # Build case_XXX -> uuid mapping
+    case_to_uuid = {f"case_{i:03d}": d.name for i, d in enumerate(uuid_dirs, 1)}
+
+    pfs_base = Path(pfs_output_dir)
+    copied_cases = 0
+    skipped_cases = 0
+
+    for case_id, uuid in case_to_uuid.items():
+        # Collect all files under robin_output that belong to this case_id
+        case_files = list(robin_output.rglob(f"*/{case_id}/*"))
+        case_files += list(robin_output.rglob(f"*/{case_id}"))
+        # More reliable: find all paths containing /case_id/
+        all_files = [f for f in robin_output.rglob("*") if f.is_file()
+                     and (f"/{case_id}/" in f.as_posix().replace("\\", "/")
+                          or f.parts[-2] == case_id)]
+
+        if not all_files:
+            skipped_cases += 1
+            continue
+
+        dst_base = pfs_base / uuid
+        for f in all_files:
+            # Keep the path relative to robin_output, but replace case_XXX with nothing
+            # Final structure: {pfs_output_dir}/{uuid}/{render_type}/{filename}
+            rel = f.relative_to(robin_output)
+            # rel looks like: uv_check/input/case_001/filename.png
+            # Strip the "input/case_XXX" part, keep render_type/filename
+            parts = rel.parts
+            # Find and remove the case_id segment and its parent "input" segment
+            try:
+                case_idx = parts.index(case_id)
+                # Keep: parts before "input" + parts after case_id
+                kept = parts[:case_idx - 1] + parts[case_idx + 1:]
+            except ValueError:
+                kept = parts
+
+            dst = dst_base / Path(*kept) if kept else dst_base / f.name
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, dst)
+
+        copied_cases += 1
+
+    print(f"  {GREEN}PFS 复制完成: {copied_cases} 个 case → {pfs_output_dir}/"
+          f"{'{uuid}'}  (跳过 {skipped_cases} 个){RESET}")
+
+
+def _upload_render_results(batch_dir: Path, bucket: str, prefix: str, env_path: str):
+    """Upload robin_output from batch_dir to BOS using bce-python-sdk."""
+    from blender_robin import bos_fetch
+    bos_fetch.load_bos_env(env_path)
+
+    try:
+        from baidubce.services.bos.bos_client import BosClient
+        from baidubce.auth.bce_credentials import BceCredentials
+        from baidubce.bce_client_configuration import BceClientConfiguration
+        import os
+
+        client = BosClient(BceClientConfiguration(
+            credentials=BceCredentials(
+                access_key_id=os.environ["BOS_ACCESS_KEY"],
+                secret_access_key=os.environ["BOS_SECRET_KEY"],
+            ),
+            endpoint=os.environ["BOS_ENDPOINT"],
+        ))
+    except Exception as e:
+        print(f"  {YELLOW}BOS 客户端初始化失败: {e}{RESET}")
+        return
+
+    robin_output = batch_dir / "robin_output"
+    if not robin_output.exists():
+        print(f"  {DIM}无 robin_output 目录，跳过上传{RESET}")
+        return
+
+    uploaded = 0
+    failed = 0
+    for f in robin_output.rglob("*"):
+        if not f.is_file():
+            continue
+        relative = f.relative_to(batch_dir)
+        key = f"{prefix}/{relative.as_posix()}"
+        try:
+            client.put_object_from_file(bucket, key, str(f))
+            uploaded += 1
+        except Exception as e:
+            print(f"  {YELLOW}上传失败 {f.name}: {e}{RESET}")
+            failed += 1
+
+    status = f"{GREEN}已上传 {uploaded} 个文件" if not failed else f"{YELLOW}上传 {uploaded} 成功, {failed} 失败"
+    print(f"  {status} → {bucket}/{prefix}{RESET}")
+
+
 def do_bos_fetch(blender, res, cfg):
     """从 BOS 按 manifest 下载模型, 然后递归渲染。"""
     try:
@@ -780,6 +924,16 @@ def do_bos_fetch(blender, res, cfg):
         print(f"  {DIM}已关闭: 模型文件渲染后保留{RESET}")
 
     # 7. 流式下载 + 渲染
+    upload_bucket = cfg.get("bos_upload_bucket", "").strip()
+    upload_prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+    pfs_output_dir = cfg.get("pfs_output_dir", "").strip()
+    if upload_bucket:
+        print(f"  {DIM}渲染结果将上传至: {upload_bucket}/{upload_prefix}/{{batch}}/{RESET}")
+    if pfs_output_dir:
+        print(f"  {DIM}渲染结果将同步到 PFS: {pfs_output_dir}/{{uuid}}/{RESET}")
+    if not upload_bucket and not pfs_output_dir:
+        print(f"  {DIM}未配置 BOS bucket 或 PFS 目录，渲染结果仅保留本地{RESET}")
+
     mapping_file = output_dir / "downloaded_model_mapping.jsonl"
     print(f"\n  {WHITE}开始流式下载 (每批 {batch_size} 个) → {output_dir}{RESET}")
     print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
@@ -809,6 +963,20 @@ def do_bos_fetch(blender, res, cfg):
             if batch_success > 0:
                 print(f"  {WHITE}渲染批次 {total_batches} → {batch_dir}{RESET}")
                 do_render(blender, batch_dir, res, cfg, recursive=True)
+
+                # 上传渲染结果到 BOS
+                if upload_bucket:
+                    _upload_render_results(
+                        batch_dir=batch_dir,
+                        bucket=upload_bucket,
+                        prefix=f"{upload_prefix}/{batch_dir.name}",
+                        env_path=str(env_path),
+                    )
+
+                # 复制渲染结果到 PFS（按 uuid 组织）
+                if pfs_output_dir:
+                    _copy_render_results_to_pfs(batch_dir, pfs_output_dir)
+
                 if delete_after_render:
                     import shutil
                     shutil.rmtree(batch_dir, ignore_errors=True)

@@ -350,28 +350,28 @@ def main() -> None:
         wireframe_mode = opts.get("wireframe_mode", "material")
         wire_size = opts.get("wire_size", 1.5)
 
-        engine = config.get("engine", "BLENDER_EEVEE_NEXT")
-        render.engine = rv.resolve_engine(engine)
-        if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
-            samples = config.get("samples")
-            if samples is not None:
-                scene.eevee.taa_render_samples = samples
-
-        if wireframe_mode == "clay":
+        # Fast path: Workbench for clay/normal modes (3-10x faster than EEVEE)
+        if wireframe_mode in ("clay", "normal"):
             apply_flat_shading(log=rv.log)
-            material = create_matcap_wireframe_material(wire_size, matcap_name="basic_1.exr")
-            apply_material_to_meshes(material, log=rv.log)
-        elif wireframe_mode == "normal":
-            apply_flat_shading(log=rv.log)
-            material = create_matcap_wireframe_material(wire_size, matcap_name="check_normal+y.exr")
-            apply_material_to_meshes(material, log=rv.log)
-        elif wireframe_mode == "face_normal":
-            apply_flat_shading(log=rv.log)
-            material = create_face_normal_wireframe_material(wire_size)
-            apply_material_to_meshes(material, log=rv.log)
+            matcap = "basic_1.exr" if wireframe_mode == "clay" else "check_normal+y.exr"
+            setup_workbench_wireframe(opts, matcap_name=matcap, log=rv.log)
+            rv.log(f"Wireframe: Using fast Workbench mode ({wireframe_mode})")
         else:
-            material = create_wireframe_material(wire_size)
-            apply_material_to_meshes(material, log=rv.log)
+            # EEVEE shader-based path for material/face_normal modes
+            engine = config.get("engine", "BLENDER_EEVEE_NEXT")
+            render.engine = rv.resolve_engine(engine)
+            if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+                samples = config.get("samples")
+                if samples is not None:
+                    scene.eevee.taa_render_samples = samples
+
+            if wireframe_mode == "face_normal":
+                apply_flat_shading(log=rv.log)
+                material = create_face_normal_wireframe_material(wire_size)
+                apply_material_to_meshes(material, log=rv.log)
+            else:  # material
+                material = create_wireframe_material(wire_size)
+                apply_material_to_meshes(material, log=rv.log)
 
         rv.setup_white_world(scene)
 
