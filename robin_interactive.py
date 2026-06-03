@@ -605,15 +605,18 @@ def zip_render_folders(base_output, commands):
     return zip_files
 
 
-def do_render(blender, directory, res, cfg, recursive=False):
+def do_render(blender, directory, res, cfg, recursive=False, mode_cmd=None):
     """Select render mode and execute."""
-    selected = select_menu("选择渲染模式 (↑↓ 选择, Enter 确认, Esc 返回):", RENDER_MODES)
-    if selected < 0:
-        return
-    mode_name, mode_cmd = RENDER_MODES[selected]
-    if mode_cmd == "back":
-        return
-    print(f"\n  已选择: {GREEN}{mode_name}{RESET}\n")
+    if mode_cmd is None:
+        selected = select_menu("选择渲染模式 (↑↓ 选择, Enter 确认, Esc 返回):", RENDER_MODES)
+        if selected < 0:
+            return
+        mode_name, mode_cmd = RENDER_MODES[selected]
+        if mode_cmd == "back":
+            return
+        print(f"\n  已选择: {GREEN}{mode_name}{RESET}\n")
+    else:
+        mode_name = next((n for n, c in RENDER_MODES if c == mode_cmd), mode_cmd)
 
     base_output = directory / "robin_output"
 
@@ -896,7 +899,13 @@ def do_bos_fetch(blender, res, cfg):
     limit = int(raw_limit) if raw_limit.isdigit() and int(raw_limit) > 0 else None
     cfg["bos_limit"] = limit
 
-    # 5. 渲染后删除模型文件
+    # 5. 渲染模式
+    render_modes_display = [(n, c) for n, c in RENDER_MODES if c != "back"]
+    selected = select_menu("选择渲染模式:", render_modes_display)
+    if selected < 0:
+        return
+    render_mode_name, render_mode_cmd = render_modes_display[selected]
+    print(f"\n  已选择: {GREEN}{render_mode_name}{RESET}\n")
     default_delete = cfg.get("bos_delete_after_render", False)
     default_hint = "Y/n" if default_delete else "y/N"
     sys.stdout.write(f"\n{CYAN}渲染后删除模型文件? {DIM}({default_hint}, 回车=保持默认){RESET}\n")
@@ -942,7 +951,7 @@ def do_bos_fetch(blender, res, cfg):
     pfs_output_dir = cfg.get("pfs_output_dir", "").strip()
 
     print(f"  {WHITE}进入渲染流程 (递归扫描 {output_dir}){RESET}")
-    do_render(blender, output_dir, res, cfg, recursive=True)
+    do_render(blender, output_dir, res, cfg, recursive=True, mode_cmd=render_mode_cmd)
 
     if upload_bucket:
         _upload_render_results(
