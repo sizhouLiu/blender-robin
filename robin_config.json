@@ -22,5 +22,6 @@
   "delete_closeups": true,
   "camera_json": "",
   "export_blender_uv": false,
-  "zip_output": false
+  "zip_output": false,
+  "use_workbench_wireframe": true 
 }

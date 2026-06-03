@@ -298,8 +298,8 @@ def setup_workbench_wireframe(opts, matcap_name=None, log=print):
         shading.color_type = 'SINGLE'
         shading.single_color = (0.9, 0.9, 0.9)
 
-    shading.show_xray_wireframe = True
-    shading.xray_alpha_wireframe = 0.0
+    shading.show_wireframe = True
+    shading.wireframe_color_type = 'THEME'  # black wireframe
 
     scene.render.film_transparent = True
 
@@ -351,21 +351,32 @@ def main() -> None:
         wire_size = opts.get("wire_size", 1.5)
 
         # Fast path: Workbench for clay/normal modes (3-10x faster than EEVEE)
-        if wireframe_mode in ("clay", "normal"):
+        use_workbench_fast = opts.get("use_workbench_wireframe", False)
+        if use_workbench_fast and wireframe_mode in ("clay", "normal"):
             apply_flat_shading(log=rv.log)
             matcap = "basic_1.exr" if wireframe_mode == "clay" else "check_normal+y.exr"
             setup_workbench_wireframe(opts, matcap_name=matcap, log=rv.log)
-            rv.log(f"Wireframe: Using fast Workbench mode ({wireframe_mode})")
+            rv.log(f"Wireframe: Using Workbench mode ({wireframe_mode})")
         else:
-            # EEVEE shader-based path for material/face_normal modes
+            # EEVEE shader-based path - force low samples for clay/normal modes
             engine = config.get("engine", "BLENDER_EEVEE_NEXT")
             render.engine = rv.resolve_engine(engine)
             if render.engine in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
                 samples = config.get("samples")
+                if samples is None and wireframe_mode in ("clay", "normal"):
+                    samples = 8  # Default low samples for fast MatCap wireframe
                 if samples is not None:
                     scene.eevee.taa_render_samples = samples
 
-            if wireframe_mode == "face_normal":
+            if wireframe_mode == "clay":
+                apply_flat_shading(log=rv.log)
+                material = create_matcap_wireframe_material(wire_size, matcap_name="basic_1.exr")
+                apply_material_to_meshes(material, log=rv.log)
+            elif wireframe_mode == "normal":
+                apply_flat_shading(log=rv.log)
+                material = create_matcap_wireframe_material(wire_size, matcap_name="check_normal+y.exr")
+                apply_material_to_meshes(material, log=rv.log)
+            elif wireframe_mode == "face_normal":
                 apply_flat_shading(log=rv.log)
                 material = create_face_normal_wireframe_material(wire_size)
                 apply_material_to_meshes(material, log=rv.log)
