@@ -286,7 +286,7 @@ def bake_seam_overlay_to_image(obj, size=(1024, 1024), log=print):
         uv_edges = _normalize_uv_edges(uv_edges)
         uv_edges = np.array(uv_edges, dtype=np.float32)
         uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width, 0, width - 1)
-        uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
+        uv_edges[:, [1, 3]] = np.clip(uv_edges[:, [1, 3]] * height, 0, height - 1)  # 不翻转 V（内存版直接用）
         _draw_lines_batch(canvas, uv_edges, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3)
 
     img = bpy.data.images.new(f"UV_Seam_{obj.name}", width=width, height=height, alpha=True)
