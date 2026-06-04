@@ -196,6 +196,41 @@ def _get_model_mesh_objects(bpy):
     return [obj for obj in bpy.context.scene.objects if obj.type == "MESH" and not obj.hide_render]
 
 
+def _compute_bbox_fast(bpy, mesh_objects, depsgraph):
+    """Compute world-space bounding box using numpy for speed. Returns (min_co, max_co) as mathutils.Vector."""
+    import mathutils
+    import numpy as np
+
+    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
+    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
+
+    for obj in mesh_objects:
+        obj_eval = obj.evaluated_get(depsgraph)
+        mesh_eval = obj_eval.to_mesh()
+        if mesh_eval is None:
+            continue
+        mat = obj_eval.matrix_world
+        vcount = len(mesh_eval.vertices)
+        if vcount == 0:
+            obj_eval.to_mesh_clear()
+            continue
+        coords = np.empty(vcount * 3, dtype=np.float32)
+        mesh_eval.vertices.foreach_get('co', coords)
+        coords = coords.reshape((vcount, 3))
+        coords_4d = np.c_[coords, np.ones(vcount)]
+        mat_np = np.array(mat, dtype=np.float32)
+        world_coords = (mat_np @ coords_4d.T).T[:, :3]
+        min_co.x = min(min_co.x, world_coords[:, 0].min())
+        min_co.y = min(min_co.y, world_coords[:, 1].min())
+        min_co.z = min(min_co.z, world_coords[:, 2].min())
+        max_co.x = max(max_co.x, world_coords[:, 0].max())
+        max_co.y = max(max_co.y, world_coords[:, 1].max())
+        max_co.z = max(max_co.z, world_coords[:, 2].max())
+        obj_eval.to_mesh_clear()
+
+    return min_co, max_co
+
+
 def normalize_model(bpy, target_size=2.0):
     """
     Normalize imported model: center at origin and scale to target_size.
@@ -209,24 +244,7 @@ def normalize_model(bpy, target_size=2.0):
         log("Normalize: no mesh objects found")
         return
 
-    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
-    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
-
-    for obj in mesh_objects:
-        obj_eval = obj.evaluated_get(depsgraph)
-        mesh_eval = obj_eval.to_mesh()
-        if mesh_eval is None:
-            continue
-        mat = obj_eval.matrix_world
-        for v in mesh_eval.vertices:
-            world_co = mat @ v.co
-            min_co.x = min(min_co.x, world_co.x)
-            min_co.y = min(min_co.y, world_co.y)
-            min_co.z = min(min_co.z, world_co.z)
-            max_co.x = max(max_co.x, world_co.x)
-            max_co.y = max(max_co.y, world_co.y)
-            max_co.z = max(max_co.z, world_co.z)
-        obj_eval.to_mesh_clear()
+    min_co, max_co = _compute_bbox_fast(bpy, mesh_objects, depsgraph)
 
     center = (min_co + max_co) / 2
     bbox_size = max_co - min_co
@@ -264,24 +282,8 @@ def get_bounding_box_evaluated(bpy, mesh_objects):
     bpy.context.view_layer.update()
     depsgraph = bpy.context.evaluated_depsgraph_get()
     depsgraph.update()
-    min_co = mathutils.Vector((float('inf'), float('inf'), float('inf')))
-    max_co = mathutils.Vector((float('-inf'), float('-inf'), float('-inf')))
 
-    for obj in mesh_objects:
-        obj_eval = obj.evaluated_get(depsgraph)
-        mesh_eval = obj_eval.to_mesh()
-        if mesh_eval is None:
-            continue
-        mat = obj_eval.matrix_world
-        for v in mesh_eval.vertices:
-            world_co = mat @ v.co
-            min_co.x = min(min_co.x, world_co.x)
-            min_co.y = min(min_co.y, world_co.y)
-            min_co.z = min(min_co.z, world_co.z)
-            max_co.x = max(max_co.x, world_co.x)
-            max_co.y = max(max_co.y, world_co.y)
-            max_co.z = max(max_co.z, world_co.z)
-        obj_eval.to_mesh_clear()
+    min_co, max_co = _compute_bbox_fast(bpy, mesh_objects, depsgraph)
 
     center = (min_co + max_co) / 2
     bbox_size = max_co - min_co
@@ -758,26 +760,26 @@ def render_multi_view(bpy, scene, setup_camera_func, center, bbox_size, opts, co
     def _make_composite(bpy, files, out_path, w, h, cols, label_tag):
         if len(files) == 0:
             return
+        import numpy as np
         rows = math.ceil(len(files) / cols)
-        canvas = bpy.data.images.new(label_tag, width=w * cols, height=h * rows, alpha=True)
-        canvas_pixels = [0.0] * (w * cols * h * rows * 4)
+        canvas = np.zeros((h * rows, w * cols, 4), dtype=np.float32)
         for i, fname in enumerate(files):
             col = i % cols
             row = rows - 1 - i // cols
             path = f"{output_dir}/{fname}.png"
             img = bpy.data.images.load(path)
-            src = list(img.pixels)
-            for y in range(h):
-                src_start = y * w * 4
-                dst_x = col * w
-                dst_y = row * h + y
-                dst_start = (dst_y * w * cols + dst_x) * 4
-                canvas_pixels[dst_start:dst_start + w * 4] = src[src_start:src_start + w * 4]
+            src = np.empty(w * h * 4, dtype=np.float32)
+            img.pixels.foreach_get(src)
             bpy.data.images.remove(img)
-        canvas.pixels = canvas_pixels
-        canvas.file_format = 'PNG'
-        canvas.save_render(out_path)
-        bpy.data.images.remove(canvas)
+            src = src.reshape((h, w, 4))
+            y0 = row * h
+            x0 = col * w
+            canvas[y0:y0 + h, x0:x0 + w] = src
+        out_img = bpy.data.images.new(label_tag, width=w * cols, height=h * rows, alpha=True)
+        out_img.pixels.foreach_set(canvas.ravel())
+        out_img.file_format = 'PNG'
+        out_img.save_render(out_path)
+        bpy.data.images.remove(out_img)
         log(f"{label}: composite saved to {out_path}")
 
     def _best_cols(n, img_w, img_h):

@@ -175,9 +175,7 @@ def _bake_uv_image(obj, output_path, size, seams_only, color=(1.0, 1.0, 1.0, 1.0
         uv_edges = np.array(uv_edges, dtype=np.float32)
         uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width,  0, width  - 1)
         uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
-
-        for x0, y0, x1, y1 in uv_edges.astype(int):
-            _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color)
+        _draw_lines_batch(canvas, uv_edges, width, height, color, thickness=3)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
@@ -235,6 +233,71 @@ def bake_seam_overlay_for_mesh(obj, output_path, size=(1024, 1024), log=print):
     return success
 
 
+def bake_seam_overlay_to_image(obj, size=(1024, 1024), log=print):
+    """Bake UV seam lines to a Blender image (in-memory, no disk I/O). Returns bpy.data.images or None."""
+    import bpy, bmesh
+    import numpy as np
+
+    width, height = size
+    canvas = np.zeros((height, width, 4), dtype=np.float32)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+
+    if not bm.loops.layers.uv.active:
+        bm.free()
+        log(f"UV Checker: WARNING - '{obj.name}' has no active UV layer")
+        return None
+
+    uv_layer = bm.loops.layers.uv.active
+    UV_EPS = 1e-5
+    uv_edges = []
+
+    for edge in bm.edges:
+        if len(edge.link_faces) < 2:
+            for face in edge.link_faces:
+                for loop in face.loops:
+                    if loop.edge == edge:
+                        uv1 = loop[uv_layer].uv.copy()
+                        uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                        uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+                        break
+        else:
+            side_uvs = []
+            for face in edge.link_faces:
+                for loop in face.loops:
+                    if loop.edge == edge:
+                        uv1 = loop[uv_layer].uv.copy()
+                        uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                        side_uvs.append((uv1, uv2))
+                        break
+            if len(side_uvs) >= 2:
+                u1a, u1b = side_uvs[0]
+                is_seam = False
+                for u2a, u2b in side_uvs[1:]:
+                    if ((abs(u1a.x - u2b.x) > UV_EPS or abs(u1a.y - u2b.y) > UV_EPS) or
+                            (abs(u1b.x - u2a.x) > UV_EPS or abs(u1b.y - u2a.y) > UV_EPS)):
+                        is_seam = True
+                        break
+                if is_seam:
+                    uv_edges.append((u1a.x, u1a.y, u1b.x, u1b.y))
+    bm.free()
+
+    if uv_edges:
+        uv_edges = _normalize_uv_edges(uv_edges)
+        uv_edges = np.array(uv_edges, dtype=np.float32)
+        uv_edges[:, [0, 2]] = np.clip(uv_edges[:, [0, 2]] * width, 0, width - 1)
+        uv_edges[:, [1, 3]] = np.clip((1.0 - uv_edges[:, [1, 3]]) * height, 0, height - 1)
+        _draw_lines_batch(canvas, uv_edges, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3)
+
+    img = bpy.data.images.new(f"UV_Seam_{obj.name}", width=width, height=height, alpha=True)
+    img.pixels.foreach_set(canvas.ravel())
+    img.update()
+    img.pack()
+    img.colorspace_settings.name = 'Non-Color'
+    log(f"UV Checker: baked seam overlay for '{obj.name}' (in-memory)")
+    return img
+
+
 def _save_render_standard(img, output_path):
     """Save image using Standard view transform to avoid AgX/Filmic color shift."""
     import bpy
@@ -255,6 +318,50 @@ def _save_render_standard(img, output_path):
         cm.look = prev_look
         cm.exposure = prev_exposure
         cm.gamma = prev_gamma
+
+
+def _draw_lines_batch(canvas, edges, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3):
+    """Batch draw lines on canvas. edges: Nx4 array of (x0, y0, x1, y1)."""
+    import numpy as np
+
+    if len(edges) == 0:
+        return
+
+    for x0, y0, x1, y1 in edges.astype(int):
+        dx = abs(x1 - x0)
+        dy = abs(y1 - y0)
+        sx = 1 if x0 < x1 else -1
+        sy = 1 if y0 < y1 else -1
+        err = dx - dy
+        x, y = x0, y0
+        points = []
+        while True:
+            points.append((y, x))
+            if x == x1 and y == y1:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
+        if not points:
+            continue
+        pts = np.array(points)
+        if thickness > 1:
+            offsets = np.arange(thickness) - thickness // 2
+            if dx >= dy:
+                ys = (pts[:, 0:1] + offsets).ravel()
+                xs = np.repeat(pts[:, 1], thickness)
+            else:
+                ys = np.repeat(pts[:, 0], thickness)
+                xs = (pts[:, 1:2] + offsets).ravel()
+            mask = (ys >= 0) & (ys < height) & (xs >= 0) & (xs < width)
+            canvas[ys[mask], xs[mask]] = color
+        else:
+            mask = (pts[:, 0] >= 0) & (pts[:, 0] < height) & (pts[:, 1] >= 0) & (pts[:, 1] < width)
+            canvas[pts[mask, 0], pts[mask, 1]] = color
 
 
 def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3):
@@ -367,24 +474,13 @@ def create_per_mesh_material(obj, uv_layout_img, grid_img=None, checker_scale=No
     links.new(tex_coord.outputs["UV"], seam_tex.inputs["Vector"])
 
     # MixRGB: blend base with red using seam alpha as factor
-    try:
-        mix = nodes.new("ShaderNodeMix")
-        mix.data_type = 'RGBA'
-        mix.blend_type = 'MIX'
-        mix.location = (-50, 0)
-        mix.inputs["B"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
-        links.new(seam_tex.outputs["Alpha"], mix.inputs["Factor"])
-        links.new(base_output, mix.inputs["A"])
-        links.new(mix.outputs["Result"], bsdf.inputs["Base Color"])
-    except:
-        # Fallback to Blender 3.x API
-        mix = nodes.new("ShaderNodeMixRGB")
-        mix.blend_type = 'MIX'
-        mix.location = (-50, 0)
-        mix.inputs["Color2"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
-        links.new(seam_tex.outputs["Alpha"], mix.inputs["Fac"])
-        links.new(base_output, mix.inputs["Color1"])
-        links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
+    mix = nodes.new("ShaderNodeMixRGB")
+    mix.blend_type = 'MIX'
+    mix.location = (-50, 0)
+    mix.inputs["Color2"].default_value = (1.0, 0.1, 0.1, 1.0)  # bright red
+    links.new(seam_tex.outputs["Alpha"], mix.inputs["Fac"])
+    links.new(base_output, mix.inputs["Color1"])
+    links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
 
     return mat
 
@@ -508,8 +604,7 @@ def _bake_uv_image_group(entries, output_path, size, seams_only, color=(1.0, 1.0
 
     arr = np.clip(arr, 0, [width-1, height-1, width-1, height-1])
 
-    for x0, y0, x1, y1 in arr.astype(int):
-        _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color, thickness)
+    _draw_lines_batch(canvas, arr, width, height, color, thickness)
 
     img = bpy.data.images.new("UV_Bake_Temp", width=width, height=height, alpha=True)
     img.pixels.foreach_set(canvas.ravel())
@@ -616,11 +711,104 @@ def _group_objects_by_material(mesh_objects, require_basecolor=False, log=print)
     return result
 
 
+def _bake_uv_canvas_group(entries, size, seams_only, color, thickness, log=print):
+    """Same as _bake_uv_image_group but returns numpy canvas directly (no disk I/O)."""
+    import bmesh
+    import numpy as np
+
+    width, height = size
+    UV_EPS = 1e-5
+    all_uv_edges = []
+
+    for obj, face_filter in entries:
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+
+        if not bm.loops.layers.uv.active:
+            bm.free()
+            log(f"UV Checker: WARNING - '{obj.name}' has no active UV layer")
+            continue
+
+        uv_layer = bm.loops.layers.uv.active
+        uv_edges = []
+
+        if seams_only:
+            for edge in bm.edges:
+                relevant_faces = [f for f in edge.link_faces
+                                  if face_filter is None or f.index in face_filter]
+                if not relevant_faces:
+                    continue
+                if len(edge.link_faces) < 2:
+                    for face in relevant_faces:
+                        for loop in face.loops:
+                            if loop.edge == edge:
+                                uv1 = loop[uv_layer].uv.copy()
+                                uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                                uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+                                break
+                else:
+                    side_uvs = []
+                    for face in edge.link_faces:
+                        for loop in face.loops:
+                            if loop.edge == edge:
+                                uv1 = loop[uv_layer].uv.copy()
+                                uv2 = loop.link_loop_next[uv_layer].uv.copy()
+                                side_uvs.append((uv1, uv2))
+                                break
+                    if len(side_uvs) >= 2:
+                        u1a, u1b = side_uvs[0]
+                        is_seam = False
+                        for u2a, u2b in side_uvs[1:]:
+                            if ((abs(u1a.x - u2b.x) > UV_EPS or abs(u1a.y - u2b.y) > UV_EPS) or
+                                    (abs(u1b.x - u2a.x) > UV_EPS or abs(u1b.y - u2a.y) > UV_EPS)):
+                                is_seam = True
+                                break
+                        if is_seam:
+                            uv_edges.append((u1a.x, u1a.y, u1b.x, u1b.y))
+        else:
+            for face in bm.faces:
+                if face_filter is not None and face.index not in face_filter:
+                    continue
+                loops = face.loops
+                n = len(loops)
+                for i, loop in enumerate(loops):
+                    uv1 = loop[uv_layer].uv
+                    uv2 = loops[(i + 1) % n][uv_layer].uv
+                    uv_edges.append((uv1.x, uv1.y, uv2.x, uv2.y))
+
+        bm.free()
+        all_uv_edges.extend(uv_edges)
+
+    canvas = np.zeros((height, width, 4), dtype=np.float32)
+    if not all_uv_edges:
+        return canvas
+
+    arr = np.array(all_uv_edges, dtype=np.float32)
+    all_u = np.concatenate([arr[:, 0], arr[:, 2]])
+    all_v = np.concatenate([arr[:, 1], arr[:, 3]])
+    u_min, u_max = np.min(all_u), np.max(all_u)
+    v_min, v_max = np.min(all_v), np.max(all_v)
+
+    u_range = u_max - u_min if u_max - u_min > 1e-6 else 1.0
+    v_range = v_max - v_min if v_max - v_min > 1e-6 else 1.0
+    u_min -= u_range * 0.05; u_max += u_range * 0.05
+    v_min -= v_range * 0.05; v_max += v_range * 0.05
+
+    arr[:, 0] = (arr[:, 0] - u_min) / (u_max - u_min) * (width - 1)
+    arr[:, 2] = (arr[:, 2] - u_min) / (u_max - u_min) * (width - 1)
+    arr[:, 1] = (arr[:, 1] - v_min) / (v_max - v_min) * (height - 1)
+    arr[:, 3] = (arr[:, 3] - v_min) / (v_max - v_min) * (height - 1)
+    arr = np.clip(arr, 0, [width - 1, height - 1, width - 1, height - 1])
+
+    _draw_lines_batch(canvas, arr, width, height, color, thickness)
+    return canvas
+
+
 def export_uv_layout_composite_grouped(groups, output_path, cell_size=512, log=print):
     """Export UV layout from pre-computed material groups into a grid PNG using numpy.
     Objects sharing the same material are drawn together in one cell.
     Draws all UV edges in white, then overlays seams in red."""
-    import bpy, os, math, tempfile, shutil
+    import bpy, os, math
     import numpy as np
 
     if not groups:
@@ -632,30 +820,16 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512, log=p
     canvas_w = cols * cell_size
     canvas_h = rows * cell_size
 
-    canvas = np.ones((canvas_h, canvas_w, 4), dtype=np.float32)
-    canvas[:, :, 3] = 0.0  # transparent background
-
-    tmp_dir = tempfile.mkdtemp(prefix="uv_layout_")
+    canvas = np.zeros((canvas_h, canvas_w, 4), dtype=np.float32)
 
     for i, (mat_name, entries) in enumerate(groups):
         col = i % cols
         row = i // cols
 
-        tmp_all = os.path.join(tmp_dir, f"uv_all_{i:04d}.png")
-        _bake_uv_image_group(entries, tmp_all, size=(cell_size, cell_size), seams_only=False, color=(1.0, 1.0, 1.0, 1.0), thickness=1)
-
-        tmp_seam = os.path.join(tmp_dir, f"uv_seam_{i:04d}.png")
-        _bake_uv_image_group(entries, tmp_seam, size=(cell_size, cell_size), seams_only=True, color=(1.0, 0.1, 0.1, 1.0), thickness=3)
-
-        img_all = bpy.data.images.load(tmp_all, check_existing=False)
-        img_all.colorspace_settings.name = 'Non-Color'
-        src_all = np.array(img_all.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
-        bpy.data.images.remove(img_all)
-
-        img_seam = bpy.data.images.load(tmp_seam, check_existing=False)
-        img_seam.colorspace_settings.name = 'Non-Color'
-        src_seam = np.array(img_seam.pixels, dtype=np.float32).reshape((cell_size, cell_size, 4))
-        bpy.data.images.remove(img_seam)
+        src_all = _bake_uv_canvas_group(entries, (cell_size, cell_size), seams_only=False,
+                                         color=(1.0, 1.0, 1.0, 1.0), thickness=1, log=log)
+        src_seam = _bake_uv_canvas_group(entries, (cell_size, cell_size), seams_only=True,
+                                          color=(1.0, 0.1, 0.1, 1.0), thickness=3, log=log)
 
         alpha_seam = src_seam[:, :, 3:4]
         composite = src_all * (1 - alpha_seam) + src_seam * alpha_seam
@@ -663,8 +837,6 @@ def export_uv_layout_composite_grouped(groups, output_path, cell_size=512, log=p
         y0 = row * cell_size
         x0 = col * cell_size
         canvas[y0:y0 + cell_size, x0:x0 + cell_size] = composite
-
-    shutil.rmtree(tmp_dir, ignore_errors=True)
 
     out_img = bpy.data.images.new(
         "UV_Layout_Composite", width=canvas_w, height=canvas_h, alpha=True
@@ -787,7 +959,7 @@ def export_blender_uv_layout_composite_grouped(groups, output_path, uv_layout_im
 
 
 def main() -> None:
-    import bpy, os, tempfile, shutil
+    import bpy, os
 
     separator_idx = sys.argv.index("--")
     config_json = sys.argv[separator_idx + 1]
@@ -830,7 +1002,6 @@ def main() -> None:
 
         grid_img = None
         original_material_groups = []
-        tmp_dir = None
         uv_layout_images = {}
 
         if not uv_mesh_objects:
@@ -843,16 +1014,11 @@ def main() -> None:
             rv.log(f"UV Checker: {len(original_material_groups)} material group(s) detected: "
                 + ", ".join(f"{k}({sum(1 for _ in v)})" for k, v in original_material_groups))
 
-            tmp_dir = tempfile.mkdtemp(prefix="uv_seam_")
-
             if enable_seam_overlay:
                 rv.timer_start("bake_seams")
-                for i, obj in enumerate(uv_mesh_objects):
-                    seam_path = os.path.join(tmp_dir, f"seam_{i:04d}.png")
-                    success = bake_seam_overlay_for_mesh(obj, seam_path, size=(1024, 1024), log=rv.log)
-                    if success:
-                        uv_img = bpy.data.images.load(seam_path, check_existing=False)
-                        uv_img.colorspace_settings.name = 'Non-Color'
+                for obj in uv_mesh_objects:
+                    uv_img = bake_seam_overlay_to_image(obj, size=(1024, 1024), log=rv.log)
+                    if uv_img:
                         uv_layout_images[obj.name] = uv_img
                 rv.timer_end("bake_seams")
 
@@ -925,8 +1091,6 @@ def main() -> None:
                 rv.log(f"UV Checker: Blender UV export failed - {e} (requires foreground mode)")
             rv.timer_end("blender_uv_export")
 
-        if tmp_dir:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
         for img in uv_layout_images.values():
             bpy.data.images.remove(img)
 
