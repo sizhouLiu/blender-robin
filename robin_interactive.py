@@ -95,6 +95,8 @@ DEFAULT_CONFIG = {
     "bos_delete_after_render": False,
     "bos_upload_bucket": "",
     "bos_upload_prefix": "robin_renders",
+    "bos_upload_after_render": False,
+    "bos_delete_local_after_upload": False,
     "pfs_output_dir": "/mnt/pfs/users/sizhou",
     "zip_output": True,
 
@@ -115,6 +117,7 @@ def save_config(cfg):
 
 MAIN_MENU = [
     ("渲染图片", "render"),
+    ("上传渲染结果到 BOS", "upload_bos"),
     ("从 BOS 拉取并渲染", "bos"),
     ("编辑配置", "config"),
     ("重新选择文件夹", "change_dir"),
@@ -369,6 +372,8 @@ def edit_config(cfg):
             (f"写入日志文件: {'是' if cfg.get('enable_log', True) else '否'}", "enable_log"),
             (f"BOS 上传 bucket: {cfg.get('bos_upload_bucket', '(未设置)') or '(未设置)'}", "bos_upload_bucket"),
             (f"BOS 上传前缀: {cfg.get('bos_upload_prefix', 'robin_renders')}", "bos_upload_prefix"),
+            (f"渲染后自动上传 BOS: {'是' if cfg.get('bos_upload_after_render', False) else '否'}", "bos_upload_after_render"),
+            (f"上传后删除本地文件: {'是' if cfg.get('bos_delete_local_after_upload', False) else '否'}", "bos_delete_local_after_upload"),
             (f"PFS 输出目录: {cfg.get('pfs_output_dir', '/mnt/pfs/users/sizhou')}", "pfs_output_dir"),
             ("保存并返回", "save"),
             ("← 返回 (不保存)", "back"),
@@ -556,6 +561,16 @@ def edit_config(cfg):
                 cfg["bos_upload_prefix"] = raw
                 print(f"  {GREEN}已更新{RESET}\n")
 
+        elif key == "bos_upload_after_render":
+            cfg["bos_upload_after_render"] = not cfg.get("bos_upload_after_render", False)
+            state = cfg["bos_upload_after_render"]
+            print(f"\n  {GREEN}渲染后自动上传 BOS: {'已开启' if state else '已关闭'}{RESET}\n")
+
+        elif key == "bos_delete_local_after_upload":
+            cfg["bos_delete_local_after_upload"] = not cfg.get("bos_delete_local_after_upload", False)
+            state = cfg["bos_delete_local_after_upload"]
+            print(f"\n  {GREEN}上传后删除本地文件: {'已开启' if state else '已关闭'}{RESET}\n")
+
         elif key == "pfs_output_dir":
             cur = cfg.get("pfs_output_dir", "/mnt/pfs/users/sizhou")
             sys.stdout.write(f"\n  {CYAN}PFS 输出目录 (当前: {cur}): {RESET}")
@@ -685,6 +700,26 @@ def do_render(blender, directory, res, cfg, recursive=False, mode_cmd=None):
     print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
     print(f"\n  {GREEN}全部完成!{RESET}")
     print(f"  输出目录: {WHITE}{base_output}{RESET}\n")
+
+    # Upload to BOS (if enabled)
+    upload_bucket = cfg.get("bos_upload_bucket", "").strip()
+    if cfg.get("bos_upload_after_render", False) and upload_bucket:
+        upload_prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+        env_path = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
+        delete_local = cfg.get("bos_delete_local_after_upload", False)
+        print(f"  {DIM}正在上传到 BOS...{RESET}")
+        for _, folder in commands:
+            target = base_output / folder
+            if target.exists():
+                upload_output_to_bos(
+                    output_dir=target,
+                    model_dir=directory,
+                    bucket=upload_bucket,
+                    prefix=f"{upload_prefix}/{folder}",
+                    env_path=env_path,
+                    delete_local=delete_local,
+                    recursive=recursive,
+                )
 
     # Compress each rendered folder into its own zip (if enabled)
     if cfg.get("zip_output", True):
@@ -852,6 +887,151 @@ def _upload_render_results(batch_dir: Path, bucket: str, prefix: str, env_path: 
 
     status = f"{GREEN}已上传 {uploaded} 个文件" if not failed else f"{YELLOW}上传 {uploaded} 成功, {failed} 失败"
     print(f"  {status} → {bucket}/{prefix}{RESET}")
+
+
+def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix: str,
+                         env_path: str, delete_local: bool = False, recursive: bool = False):
+    """上传渲染结果目录到 BOS。
+
+    遍历 output_dir/input/case_XXX/ 下所有文件，以模型文件 stem 为标识上传。
+    路径格式：{prefix}/input/{model_id}/{filename}  (per-case files)
+              {prefix}/global/{filename}           (global files)
+    返回 (uploaded, failed) 计数。
+    """
+    from blender_robin import bos_fetch
+    bos_fetch.load_bos_env(env_path)
+
+    try:
+        from baidubce.services.bos.bos_client import BosClient
+        from baidubce.auth.bce_credentials import BceCredentials
+        from baidubce.bce_client_configuration import BceClientConfiguration
+        import os as _os
+
+        client = BosClient(BceClientConfiguration(
+            credentials=BceCredentials(
+                access_key_id=_os.environ["BOS_ACCESS_KEY"],
+                secret_access_key=_os.environ["BOS_SECRET_KEY"],
+            ),
+            endpoint=_os.environ["BOS_ENDPOINT"],
+        ))
+    except Exception as e:
+        print(f"  {YELLOW}BOS 客户端初始化失败: {e}{RESET}")
+        return 0, 0
+
+    input_dir = output_dir / "input"
+    if not input_dir.exists():
+        print(f"  {DIM}无 input 目录: {input_dir}{RESET}")
+        return 0, 0
+
+    exts = ("*.glb", "*.gltf", "*.obj", "*.fbx", "*.blend", "*.dae",
+            "*.usd", "*.usda", "*.usdc", "*.usdz", "*.ply", "*.stl")
+    if recursive:
+        model_files = []
+        for ext in exts:
+            model_files.extend(model_dir.rglob(ext))
+        model_files = sorted(set(model_files))
+    else:
+        model_files = []
+        for ext in exts:
+            model_files.extend(model_dir.glob(ext))
+        model_files = sorted(set(model_files))
+
+    model_id_map = {f"case_{i:03d}": f.stem for i, f in enumerate(model_files, 1)}
+
+    case_dirs = sorted([d for d in input_dir.iterdir() if d.is_dir() and d.name.startswith("case_")])
+
+    uploaded = 0
+    failed = 0
+    for case_dir in case_dirs:
+        model_id = model_id_map.get(case_dir.name, case_dir.name)
+        for f in case_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            filename = f.relative_to(case_dir).as_posix()
+            key = f"{prefix}/input/{model_id}/{filename}"
+            try:
+                client.put_object_from_file(bucket, key, str(f))
+                uploaded += 1
+            except Exception as e:
+                print(f"  {YELLOW}上传失败 {key}: {e}{RESET}")
+                failed += 1
+
+    # 上传 global 目录（如果有）
+    global_dir = output_dir / "global"
+    if global_dir.exists():
+        for f in global_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            filename = f.relative_to(global_dir).as_posix()
+            key = f"{prefix}/global/{filename}"
+            try:
+                client.put_object_from_file(bucket, key, str(f))
+                uploaded += 1
+            except Exception as e:
+                print(f"  {YELLOW}上传失败 {key}: {e}{RESET}")
+                failed += 1
+
+    if delete_local and failed == 0:
+        import shutil
+        shutil.rmtree(output_dir, ignore_errors=True)
+        print(f"  {DIM}已删除本地目录: {output_dir}{RESET}")
+
+    status_color = GREEN if not failed else YELLOW
+    print(f"  {status_color}BOS 上传完成: {uploaded} 成功, {failed} 失败 → {bucket}/{prefix}{RESET}")
+    return uploaded, failed
+
+
+def do_upload_bos(directory: Path, cfg):
+    """手动选择渲染结果文件夹上传到 BOS。"""
+    base_output = directory / "robin_output"
+    if not base_output.exists():
+        print(f"\n  {YELLOW}未找到 robin_output 目录: {base_output}{RESET}\n")
+        return
+
+    sub_dirs = sorted([d for d in base_output.iterdir() if d.is_dir()])
+    if not sub_dirs:
+        print(f"\n  {YELLOW}robin_output 下无子目录{RESET}\n")
+        return
+
+    options = [(d.name, d) for d in sub_dirs] + [("← 返回", None)]
+    idx = select_menu("选择要上传的渲染结果 (↑↓ 选择, Enter 确认):", options)
+    if idx < 0 or options[idx][1] is None:
+        return
+
+    selected_dir = options[idx][1]
+    print(f"\n  已选择: {GREEN}{selected_dir.name}{RESET}")
+
+    bucket = cfg.get("bos_upload_bucket", "").strip()
+    prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+    env_path = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
+
+    if not bucket:
+        sys.stdout.write(f"\n  {CYAN}BOS Bucket (未配置，请输入): {RESET}")
+        sys.stdout.flush()
+        bucket = input().strip()
+        if not bucket:
+            print(f"  {YELLOW}未输入 bucket，取消上传{RESET}\n")
+            return
+        cfg["bos_upload_bucket"] = bucket
+
+    print(f"  上传目标: {WHITE}{bucket}/{prefix}/{{model_id}}/...{RESET}")
+    sys.stdout.write(f"  {CYAN}确认上传? (Y/n): {RESET}")
+    sys.stdout.flush()
+    confirm = input().strip().lower()
+    if confirm in ("n", "no"):
+        print(f"  {DIM}已取消{RESET}\n")
+        return
+
+    delete_local = cfg.get("bos_delete_local_after_upload", False)
+    upload_output_to_bos(
+        output_dir=selected_dir,
+        model_dir=directory,
+        bucket=bucket,
+        prefix=f"{prefix}/{selected_dir.name}",
+        env_path=env_path,
+        delete_local=delete_local,
+    )
+    print()
 
 
 def do_bos_fetch(blender, res, cfg):
@@ -1066,6 +1246,8 @@ def main():
         if action == "render":
             print()
             do_render(blender, directory, res, cfg)
+        elif action == "upload_bos":
+            do_upload_bos(directory, cfg)
         elif action == "bos":
             do_bos_fetch(blender, res, cfg)
         elif action == "config":
