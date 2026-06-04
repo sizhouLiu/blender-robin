@@ -410,6 +410,52 @@ def _draw_line_numpy(canvas, x0, y0, x1, y1, width, height, color=(1.0, 1.0, 1.0
         canvas[pts[mask, 0], pts[mask, 1]] = color
 
 
+def _draw_lines_batch_vectorized(canvas, edges, width, height, color=(1.0, 1.0, 1.0, 1.0), thickness=3):
+    """Vectorized batch drawing of all lines. Much faster than loop over _draw_line_numpy.
+
+    edges: numpy array of shape (N, 4) containing [x0, y0, x1, y1] per line.
+    """
+    import numpy as np
+
+    if len(edges) == 0:
+        return
+
+    # For each line, sample points along it using linspace
+    # Use a fixed number of samples per line proportional to its length
+    x0, y0, x1, y1 = edges[:, 0], edges[:, 1], edges[:, 2], edges[:, 3]
+    lengths = np.maximum(np.abs(x1 - x0), np.abs(y1 - y0)).astype(int) + 1
+
+    # To avoid huge memory, cap samples per line
+    max_samples = min(int(np.max(lengths)) + 1, 200)
+
+    all_xs = []
+    all_ys = []
+
+    for i in range(len(edges)):
+        n = min(lengths[i], max_samples)
+        if n < 2:
+            n = 2
+        ts = np.linspace(0, 1, n)
+        xs = (x0[i] + ts * (x1[i] - x0[i])).astype(int)
+        ys = (y0[i] + ts * (y1[i] - y0[i])).astype(int)
+        all_xs.append(xs)
+        all_ys.append(ys)
+
+    xs = np.concatenate(all_xs)
+    ys = np.concatenate(all_ys)
+
+    # Apply thickness
+    if thickness > 1:
+        offsets = np.arange(thickness) - thickness // 2
+        xs_thick = (xs[:, None] + offsets).ravel()
+        ys_thick = np.repeat(ys, thickness)
+        mask = (ys_thick >= 0) & (ys_thick < height) & (xs_thick >= 0) & (xs_thick < width)
+        canvas[ys_thick[mask], xs_thick[mask]] = color
+    else:
+        mask = (ys >= 0) & (ys < height) & (xs >= 0) & (xs < width)
+        canvas[ys[mask], xs[mask]] = color
+
+
 def create_per_mesh_material(obj, uv_layout_img, grid_img=None, checker_scale=None):
     """Create material with color grid or checker base + optional red seam overlay.
 
@@ -1052,6 +1098,9 @@ def main() -> None:
             samples = config.get("samples")
             if samples is not None:
                 scene.eevee.taa_render_samples = samples
+            else:
+                # UV checker doesn't need high-quality AA, use minimum samples for speed
+                scene.eevee.taa_render_samples = 1
 
         rv.setup_white_world(scene)
 
