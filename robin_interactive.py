@@ -118,6 +118,7 @@ def save_config(cfg):
 MAIN_MENU = [
     ("渲染图片", "render"),
     ("上传渲染结果到 BOS", "upload_bos"),
+    ("查看评分结果", "view_scores"),
     ("从 BOS 拉取并渲染", "bos"),
     ("编辑配置", "config"),
     ("重新选择文件夹", "change_dir"),
@@ -1011,6 +1012,71 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
     return uploaded, failed
 
 
+def do_view_scores(cfg):
+    """启动评分结果可视化查看器（Web UI）。"""
+    print(f"\n  {WHITE}查看 BOS 上的评分结果{RESET}\n")
+
+    # 输入 bucket
+    default_bucket = cfg.get("bos_upload_bucket", "").strip()
+    prompt_bucket = f"BOS Bucket (默认: {default_bucket or '无'}): " if default_bucket else "BOS Bucket: "
+    sys.stdout.write(f"  {CYAN}{prompt_bucket}{RESET}")
+    sys.stdout.flush()
+    bucket = input().strip() or default_bucket
+    if not bucket:
+        print(f"  {YELLOW}未输入 bucket，取消{RESET}\n")
+        return
+
+    # 输入 prefix
+    default_prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+    sys.stdout.write(f"  {CYAN}BOS Prefix (默认: {default_prefix}): {RESET}")
+    sys.stdout.flush()
+    prefix = input().strip() or default_prefix
+
+    # 选择要查看的渲染类型
+    render_types = [
+        ("UV 棋盘格检查", "uv_check"),
+        ("RGB 全身 + 特写", "rgb_closeup"),
+        ("线框图", "wireframe"),
+        ("Clay 渲染", "clay"),
+        ("法线贴图", "normal_map"),
+        ("Albedo", "albedo"),
+        ("自定义路径 (直接使用输入的 prefix)", None),
+        ("← 返回", "back"),
+    ]
+    idx = select_menu("选择查看的渲染类型:", render_types)
+    if idx < 0 or render_types[idx][1] == "back":
+        return
+
+    render_type = render_types[idx][1]
+    if render_type is None:
+        full_prefix = prefix
+    else:
+        full_prefix = f"{prefix}/{render_type}"
+
+    env_path = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
+
+    print(f"\n  {DIM}正在启动 Web 查看器: http://127.0.0.1:8765{RESET}")
+    print(f"  {DIM}BOS: {bucket}/{full_prefix}{RESET}\n")
+    print(f"  {YELLOW}按 Ctrl+C 停止服务{RESET}\n")
+
+    from blender_robin import bos_fetch
+    bos_fetch.load_bos_env(env_path)
+
+    # Launch web server
+    import subprocess
+    cmd = [
+        sys.executable, str(Path(__file__).parent / "view_scores.py"),
+        "--bucket", bucket,
+        "--prefix", full_prefix,
+        "--port", "8765",
+        "--host", "127.0.0.1",
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+    except KeyboardInterrupt:
+        print(f"\n  {DIM}已停止查看器{RESET}\n")
+
+
 def do_upload_bos(directory: Path, cfg):
     """手动选择渲染结果文件夹上传到 BOS。"""
     base_output = directory / "robin_output"
@@ -1283,6 +1349,8 @@ def main():
             do_render(blender, directory, res, cfg)
         elif action == "upload_bos":
             do_upload_bos(directory, cfg)
+        elif action == "view_scores":
+            do_view_scores(cfg)
         elif action == "bos":
             do_bos_fetch(blender, res, cfg)
         elif action == "config":
