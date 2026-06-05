@@ -26,16 +26,21 @@ class BatchProcessor:
     def process(self, configs: list[RenderConfig]) -> BatchResult:
         start = time.monotonic()
         results: list[RenderResult] = []
+        total = len(configs)
 
         if self.max_parallel == 1:
-            for config in configs:
+            for i, config in enumerate(configs, 1):
+                print(f"  渲染 [{i}/{total}] {config.blend_file.name}", flush=True)
                 result = self.renderer.render(config)
                 results.append(result)
         else:
             with ProcessPoolExecutor(max_workers=self.max_parallel) as executor:
                 futures = {executor.submit(self.renderer.render, cfg): cfg for cfg in configs}
-                for future in as_completed(futures):
-                    results.append(future.result())
+                for i, future in enumerate(as_completed(futures), 1):
+                    result = future.result()
+                    status = "OK" if result.success else "FAIL"
+                    print(f"  [{i}/{total}] [{status}] {result.blend_file.name}", flush=True)
+                    results.append(result)
 
         elapsed = time.monotonic() - start
         succeeded = sum(1 for r in results if r.success)

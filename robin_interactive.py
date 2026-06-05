@@ -546,9 +546,14 @@ def edit_config(cfg):
 
         elif key == "bos_upload_bucket":
             cur = cfg.get("bos_upload_bucket", "")
-            sys.stdout.write(f"\n  {CYAN}BOS 上传 bucket (当前: {cur or '(未设置)'}, 留空清除): {RESET}")
+            sys.stdout.write(f"\n  {CYAN}BOS 上传 bucket (当前: {cur or '(未设置)'}, 留空清除, 仅支持小写/数字/连字符): {RESET}")
             sys.stdout.flush()
             raw = input().strip()
+            if raw:
+                import re
+                if not re.match(r'^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$', raw):
+                    print(f"  {YELLOW}bucket 名称不合法: 3-63字符, 小写字母/数字/连字符, 不能以连字符开头/结尾{RESET}\n")
+                    continue
             cfg["bos_upload_bucket"] = raw
             print(f"  {GREEN}已更新{RESET}\n")
 
@@ -654,10 +659,10 @@ def do_render(blender, directory, res, cfg, recursive=False, mode_cmd=None):
         "normal-map": "normal-map-global",
         "albedo": "albedo-global",
     }
-    for cmd, folder in commands:
+    for ci, (cmd, folder) in enumerate(commands, 1):
         output_dir = base_output / folder
         label = next((name for name, c in RENDER_MODES if c == cmd), cmd)
-        print(f"\n  {WHITE}▶ {label}{RESET}")
+        print(f"\n  {WHITE}▶ [{ci}/{len(commands)}] {label}{RESET}")
         run_render(cmd, directory, output_dir, res, blender, cfg, recursive=recursive)
 
         src_global = directory / global_map[cmd]
@@ -918,6 +923,27 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
         print(f"  {YELLOW}BOS 客户端初始化失败: {e}{RESET}")
         return 0, 0
 
+    # 确保 bucket 存在，不存在则创建
+    try:
+        if not client.does_bucket_exist(bucket):
+            sys.stdout.write(f"  {YELLOW}BOS bucket '{bucket}' 不存在，是否创建? (Y/n): {RESET}")
+            sys.stdout.flush()
+            confirm = input().strip().lower()
+            if confirm in ("n", "no"):
+                print(f"  {DIM}已取消上传{RESET}")
+                return 0, 0
+            try:
+                client.create_bucket(bucket)
+                print(f"  {GREEN}已创建 BOS bucket: {bucket}{RESET}")
+            except Exception as e:
+                print(f"  {YELLOW}创建 bucket 失败: {e}{RESET}")
+                print(f"  {YELLOW}请手动在 BOS 控制台创建 bucket 后重试{RESET}")
+                return 0, 0
+    except Exception as e:
+        print(f"  {YELLOW}bucket 检查失败: {e}{RESET}")
+        print(f"  {YELLOW}请确认 BOS 凭证和 endpoint 是否正确{RESET}")
+        return 0, 0
+
     input_dir = output_dir / "input"
     if not input_dir.exists():
         print(f"  {DIM}无 input 目录: {input_dir}{RESET}")
@@ -940,36 +966,40 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
 
     case_dirs = sorted([d for d in input_dir.iterdir() if d.is_dir() and d.name.startswith("case_")])
 
-    uploaded = 0
-    failed = 0
+    # 先统计总文件数
+    all_files = []
     for case_dir in case_dirs:
         model_id = model_id_map.get(case_dir.name, case_dir.name)
         for f in case_dir.rglob("*"):
-            if not f.is_file():
-                continue
-            filename = f.relative_to(case_dir).as_posix()
-            key = f"{prefix}/input/{model_id}/{filename}"
-            try:
-                client.put_object_from_file(bucket, key, str(f))
-                uploaded += 1
-            except Exception as e:
-                print(f"  {YELLOW}上传失败 {key}: {e}{RESET}")
-                failed += 1
+            if f.is_file():
+                filename = f.relative_to(case_dir).as_posix()
+                all_files.append((f, f"{prefix}/input/{model_id}/{filename}"))
 
-    # 上传 global 目录（如果有）
     global_dir = output_dir / "global"
     if global_dir.exists():
         for f in global_dir.rglob("*"):
-            if not f.is_file():
-                continue
-            filename = f.relative_to(global_dir).as_posix()
-            key = f"{prefix}/global/{filename}"
-            try:
-                client.put_object_from_file(bucket, key, str(f))
-                uploaded += 1
-            except Exception as e:
-                print(f"  {YELLOW}上传失败 {key}: {e}{RESET}")
-                failed += 1
+            if f.is_file():
+                filename = f.relative_to(global_dir).as_posix()
+                all_files.append((f, f"{prefix}/global/{filename}"))
+
+    total = len(all_files)
+    if total == 0:
+        print(f"  {DIM}无文件需要上传{RESET}")
+        return 0, 0
+
+    uploaded = 0
+    failed = 0
+    for i, (f, key) in enumerate(all_files, 1):
+        sys.stdout.write(f"\r  上传中: [{i}/{total}] {uploaded} 成功, {failed} 失败")
+        sys.stdout.flush()
+        try:
+            client.put_object_from_file(bucket, key, str(f))
+            uploaded += 1
+        except Exception as e:
+            print(f"\n  {YELLOW}上传失败 {key}: {e}{RESET}")
+            failed += 1
+
+    print()  # 换行
 
     if delete_local and failed == 0:
         import shutil
@@ -1006,11 +1036,16 @@ def do_upload_bos(directory: Path, cfg):
     env_path = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
 
     if not bucket:
-        sys.stdout.write(f"\n  {CYAN}BOS Bucket (未配置，请输入): {RESET}")
+        sys.stdout.write(f"\n  {CYAN}BOS Bucket (未配置，请输入，仅支持小写字母/数字/连字符): {RESET}")
         sys.stdout.flush()
         bucket = input().strip()
         if not bucket:
             print(f"  {YELLOW}未输入 bucket，取消上传{RESET}\n")
+            return
+        # 校验 bucket 名称
+        import re
+        if not re.match(r'^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$', bucket):
+            print(f"  {YELLOW}bucket 名称不合法，必须: 3-63字符, 小写字母/数字/连字符, 不能以连字符开头/结尾{RESET}\n")
             return
         cfg["bos_upload_bucket"] = bucket
 

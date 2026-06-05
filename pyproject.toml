@@ -9,6 +9,8 @@ dependencies = [
     "tomli-w>=1.0",
     "bce-python-sdk>=0.9",
     "python-dotenv>=1.0",
+    "httpx>=0.28.1",
+    "pillow>=12.2.0",
 ]
 
 [project.scripts]
