@@ -990,10 +990,16 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
 
     uploaded = 0
     failed = 0
+    skipped = 0
     for i, (f, key) in enumerate(all_files, 1):
-        sys.stdout.write(f"\r  上传中: [{i}/{total}] {uploaded} 成功, {failed} 失败")
+        sys.stdout.write(f"\r  上传中: [{i}/{total}] {uploaded} 成功, {skipped} 跳过, {failed} 失败")
         sys.stdout.flush()
         try:
+            # 检查文件是否已存在，跳过避免重复上传
+            resp = client.list_objects(bucket, prefix=key, max_keys=1)
+            if hasattr(resp, 'contents') and resp.contents and resp.contents[0].key == key:
+                skipped += 1
+                continue
             client.put_object_from_file(bucket, key, str(f))
             uploaded += 1
         except Exception as e:
@@ -1008,7 +1014,7 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
         print(f"  {DIM}已删除本地目录: {output_dir}{RESET}")
 
     status_color = GREEN if not failed else YELLOW
-    print(f"  {status_color}BOS 上传完成: {uploaded} 成功, {failed} 失败 → {bucket}/{prefix}{RESET}")
+    print(f"  {status_color}BOS 上传完成: {uploaded} 成功, {skipped} 跳过, {failed} 失败 → {bucket}/{prefix}{RESET}")
     return uploaded, failed
 
 
