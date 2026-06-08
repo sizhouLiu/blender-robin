@@ -202,6 +202,45 @@ def build_prompt(
 # API Call
 # ============================================================================
 
+def parse_model_name(model_name: str) -> dict:
+    """Parse model name with parameters.
+
+    Format: {base_model}-m-{verbosity}-t-{reasoning_effort}-temp-{temperature}
+    Example: gemini-3-flash-preview-m-high-t-low-temp-0.00
+
+    Returns: {"base_model": ..., "verbosity": ..., "reasoning_effort": ..., "temperature": ...}
+    """
+    import re
+
+    result = {
+        "base_model": model_name,
+        "verbosity": None,
+        "reasoning_effort": None,
+        "temperature": None,
+    }
+
+    # Extract temperature: -temp-{value}
+    temp_match = re.search(r'-temp-([\d.]+)$', model_name)
+    if temp_match:
+        result["temperature"] = float(temp_match.group(1))
+        model_name = model_name[:temp_match.start()]
+
+    # Extract reasoning_effort: -t-{level}
+    think_match = re.search(r'-t-(none|minimal|low|medium|high|xhigh)$', model_name)
+    if think_match:
+        result["reasoning_effort"] = think_match.group(1)
+        model_name = model_name[:think_match.start()]
+
+    # Extract verbosity: -m-{level}
+    media_match = re.search(r'-m-(low|medium|high)$', model_name)
+    if media_match:
+        result["verbosity"] = media_match.group(1)
+        model_name = model_name[:media_match.start()]
+
+    result["base_model"] = model_name
+    return result
+
+
 async def call_api(
     case_id: str,
     client,
@@ -216,6 +255,9 @@ async def call_api(
     deerapi_key: str,
 ) -> dict:
     """Call Gemini API for a single case."""
+    # Parse model name to extract parameters
+    model_config = parse_model_name(model_name)
+
     prompt_parts = await asyncio.to_thread(
         build_prompt,
         client, case_id, bucket, storage_dir,
@@ -234,15 +276,25 @@ async def call_api(
                 b64_data = image_data
             parts.append({"inline_data": {"mime_type": "image/png", "data": b64_data}})
 
-    payload = {
-        "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": spec_to_schema(output_schema),
-        },
+    generation_config = {
+        "responseMimeType": "application/json",
+        "responseSchema": spec_to_schema(output_schema),
     }
 
-    url = f"{deerapi_base_url}/v1beta/models/{model_name}:generateContent"
+    # Add optional parameters if parsed
+    if model_config["temperature"] is not None:
+        generation_config["temperature"] = model_config["temperature"]
+    if model_config["verbosity"] is not None:
+        generation_config["mediaResolution"] = f"MEDIA_RESOLUTION_{model_config['verbosity'].upper()}"
+    if model_config["reasoning_effort"] is not None:
+        generation_config["thinkingConfig"] = {"thinkingLevel": model_config["reasoning_effort"].upper()}
+
+    payload = {
+        "contents": [{"role": "user", "parts": parts}],
+        "generationConfig": generation_config,
+    }
+
+    url = f"{deerapi_base_url}/v1beta/models/{model_config['base_model']}:generateContent"
     headers = {"x-goog-api-key": deerapi_key, "Content-Type": "application/json"}
 
     async with httpx.AsyncClient(timeout=180) as http_client:
