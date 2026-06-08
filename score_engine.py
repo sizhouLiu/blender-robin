@@ -243,9 +243,10 @@ def check_input_files_exist(client, case_id: str, bucket: str, storage_dir: str,
     return True
 
 
-def check_output_exists(client, case_id: str, bucket: str, storage_dir: str) -> bool:
+def check_output_exists(client, case_id: str, bucket: str, storage_dir: str, output_subdir: str = "") -> bool:
     """Check if output already exists."""
-    output_path = f"bos://{bucket}/{storage_dir}/output/{case_id}.json"
+    subdir = f"{output_subdir}/" if output_subdir else ""
+    output_path = f"bos://{bucket}/{storage_dir}/output/{subdir}{case_id}.json"
     return bos_exists(client, output_path)
 
 
@@ -264,6 +265,7 @@ async def process_case(
     deerapi_base_url: str,
     deerapi_key: str,
     max_retries: int,
+    output_subdir: str = "",
 ):
     """Process a single case with retry."""
     async with semaphore:
@@ -279,7 +281,8 @@ async def process_case(
                     prompt_template, global_file_paths, input_filenames,
                     output_schema, model_name, deerapi_base_url, deerapi_key
                 )
-                output_path = f"bos://{bucket}/{storage_dir}/output/{case_id}.json"
+                subdir = f"{output_subdir}/" if output_subdir else ""
+                output_path = f"bos://{bucket}/{storage_dir}/output/{subdir}{case_id}.json"
                 bos_write_json(client, output_path, result)
                 stats["success"] += 1
                 return
@@ -334,8 +337,17 @@ async def run_scoring(
     global_file_paths: dict,
     prompt_template: list,
     output_schema: dict,
+    output_subdir: str | None = None,
 ):
-    """Main scoring loop."""
+    """Main scoring loop.
+
+    output_subdir: subdirectory under output/ for this task's results.
+    Defaults to the stem of the calling script's filename (e.g. '细节丰富度').
+    """
+    import inspect
+    if output_subdir is None:
+        caller_frame = inspect.stack()[1]
+        output_subdir = Path(caller_frame.filename).stem
     client = get_bos_client(bos_endpoint, bos_access_key, bos_secret_key)
 
     bucket, storage_dir = parse_storage_location(global_file_paths)
@@ -354,7 +366,7 @@ async def run_scoring(
 
     async def _exists_async(cid: str) -> bool:
         async with check_sem:
-            return await asyncio.to_thread(check_output_exists, client, cid, bucket, storage_dir)
+            return await asyncio.to_thread(check_output_exists, client, cid, bucket, storage_dir, output_subdir)
 
     exists_flags = await asyncio.gather(*[_exists_async(cid) for cid in case_ids])
     pending = [cid for cid, done in zip(case_ids, exists_flags) if not done]
@@ -384,7 +396,7 @@ async def run_scoring(
             process_case(
                 case_id, semaphore, stats, client, bucket, storage_dir,
                 prompt_template, global_file_paths, input_filenames,
-                output_schema, model_name, deerapi_base_url, deerapi_key, max_retries
+                output_schema, model_name, deerapi_base_url, deerapi_key, max_retries, output_subdir
             )
         )
         tasks.append(task)

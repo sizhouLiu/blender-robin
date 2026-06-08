@@ -39,6 +39,7 @@ _bos_client = _get_bos_client()
 # Defaults from env or hardcode
 DEFAULT_BUCKET = os.environ.get("VIEW_BUCKET", "uv-test")
 DEFAULT_PREFIX = os.environ.get("VIEW_PREFIX", "robin_renders/uv_check")
+DEFAULT_SUBDIR = os.environ.get("VIEW_SUBDIR", "")
 
 app = FastAPI(title="Score Viewer")
 
@@ -59,9 +60,25 @@ def bos_read_json(bucket: str, key: str) -> dict:
     return json.loads(data)
 
 
-def bos_list_case_ids(bucket: str, prefix: str) -> list:
-    """List all case IDs that have output JSON."""
+def bos_list_subdirs(bucket: str, prefix: str) -> list:
+    """List immediate subdirectories under output/."""
     output_prefix = f"{prefix}/output/"
+    subdirs = []
+    response = _bos_client.list_objects(
+        bucket_name=bucket, prefix=output_prefix, delimiter="/", max_keys=1000
+    )
+    if hasattr(response, "common_prefixes") and response.common_prefixes:
+        for cp in response.common_prefixes:
+            name = cp.prefix[len(output_prefix):].rstrip("/")
+            if name:
+                subdirs.append(name)
+    return sorted(subdirs)
+
+
+(bucket: str, prefix: str, subdir: str = "") -> list:
+    """List all case IDs that have output JSON."""
+    subdir_part = f"{subdir}/" if subdir else ""
+    output_prefix = f"{prefix}/output/{subdir_part}"
     case_ids = []
     marker = None
     while True:
@@ -100,18 +117,20 @@ def bos_list_images(bucket: str, prefix: str, case_id: str) -> list:
 def list_cases(
     bucket: str = Query(default=DEFAULT_BUCKET),
     prefix: str = Query(default=DEFAULT_PREFIX),
+    subdir: str = Query(default=DEFAULT_SUBDIR),
     grade: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
 ):
     """List all scored cases with optional filtering."""
-    case_ids = bos_list_case_ids(bucket, prefix)
+    case_ids = bos_list_case_ids(bucket, prefix, subdir)
+    subdir_part = f"{subdir}/" if subdir else ""
 
     results = []
     for case_id in case_ids:
         if search and search.lower() not in case_id.lower():
             continue
         try:
-            score_data = bos_read_json(bucket, f"{prefix}/output/{case_id}.json")
+            score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
         except Exception:
             continue
         if grade and score_data.get("grade") != grade:
@@ -127,10 +146,12 @@ def get_case(
     case_id: str,
     bucket: str = Query(default=DEFAULT_BUCKET),
     prefix: str = Query(default=DEFAULT_PREFIX),
+    subdir: str = Query(default=DEFAULT_SUBDIR),
 ):
     """Get score and image list for a single case."""
+    subdir_part = f"{subdir}/" if subdir else ""
     try:
-        score_data = bos_read_json(bucket, f"{prefix}/output/{case_id}.json")
+        score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
     except Exception as e:
         return {"error": str(e)}
 
@@ -164,9 +185,11 @@ def get_image(
 def get_marks(
     bucket: str = Query(default=DEFAULT_BUCKET),
     prefix: str = Query(default=DEFAULT_PREFIX),
+    subdir: str = Query(default=DEFAULT_SUBDIR),
 ):
     """Get all marks (agree/disagree)."""
-    key = f"{prefix}/marks.json"
+    subdir_part = f"{subdir}/" if subdir else ""
+    key = f"{prefix}/marks/{subdir_part}marks.json"
     try:
         data = bos_read_json(bucket, key)
     except Exception:
@@ -180,9 +203,11 @@ def set_mark(
     mark: str = Query(..., description="agree or disagree or clear"),
     bucket: str = Query(default=DEFAULT_BUCKET),
     prefix: str = Query(default=DEFAULT_PREFIX),
+    subdir: str = Query(default=DEFAULT_SUBDIR),
 ):
     """Mark a case as agree/disagree."""
-    key = f"{prefix}/marks.json"
+    subdir_part = f"{subdir}/" if subdir else ""
+    key = f"{prefix}/marks/{subdir_part}marks.json"
     try:
         marks = bos_read_json(bucket, key)
     except Exception:
@@ -194,7 +219,6 @@ def set_mark(
         marks[case_id] = mark
 
     # Write back to BOS
-    parts = key.split("/", 0)
     _bos_client.put_object_from_string(
         bucket, key, json.dumps(marks, ensure_ascii=False)
     )
@@ -209,6 +233,7 @@ def set_mark(
 def index(
     bucket: str = Query(default=DEFAULT_BUCKET),
     prefix: str = Query(default=DEFAULT_PREFIX),
+    subdir: str = Query(default=DEFAULT_SUBDIR),
 ):
     return f"""<!DOCTYPE html>
 <html>
@@ -320,6 +345,7 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
 <script>
 const BUCKET = "{bucket}";
 const PREFIX = "{prefix}";
+const SUBDIR = "{subdir}";
 const PAGE_SIZE = 20;
 let allCases = [];
 let marks = {{}};
@@ -328,7 +354,7 @@ let searchTimeout = null;
 
 async function loadMarks() {{
     try {{
-        const resp = await fetch(`/api/marks?bucket=${{BUCKET}}&prefix=${{PREFIX}}`);
+        const resp = await fetch(`/api/marks?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}`);
         marks = await resp.json();
     }} catch(e) {{
         marks = {{}};
@@ -336,7 +362,7 @@ async function loadMarks() {{
 }}
 
 async function setMark(caseId, mark) {{
-    const url = `/api/mark/${{caseId}}?mark=${{mark}}&bucket=${{BUCKET}}&prefix=${{PREFIX}}`;
+    const url = `/api/mark/${{caseId}}?mark=${{mark}}&bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}`;
     await fetch(url, {{method: 'POST'}});
     marks[caseId] = mark === 'clear' ? undefined : mark;
     if (mark === 'clear') delete marks[caseId];
@@ -347,7 +373,7 @@ async function loadCases() {{
     const grade = document.getElementById('grade-filter').value;
     const search = document.getElementById('search').value;
     const markFilter = document.getElementById('mark-filter').value;
-    let url = `/api/cases?bucket=${{BUCKET}}&prefix=${{PREFIX}}`;
+    let url = `/api/cases?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}`;
     if (grade) url += `&grade=${{grade}}`;
     if (search) url += `&search=${{encodeURIComponent(search)}}`;
 
@@ -410,7 +436,7 @@ function renderPage() {{
         const issues = (c.issues || []).join(', ');
         const caseId = c.case_id;
         const images = (c.images || []).filter(f => f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.webp'));
-        const imgsHtml = images.map(f => `<img src="/api/image/${{caseId}}/${{f}}?bucket=${{BUCKET}}&prefix=${{PREFIX}}" onerror="this.style.display='none'" onclick="openModal(this.src)">`).join('');
+        const imgsHtml = images.map(f => `<img src="/api/image/${{caseId}}/${{f}}?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}" onerror="this.style.display='none'" onclick="openModal(this.src)">`).join('');
 
         const mark = marks[caseId];
         const markBtns = `
@@ -471,6 +497,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Score Viewer Web UI")
     parser.add_argument("--bucket", default=DEFAULT_BUCKET, help="BOS bucket")
     parser.add_argument("--prefix", default=DEFAULT_PREFIX, help="Storage prefix")
+    parser.add_argument("--subdir", default=DEFAULT_SUBDIR, help="Output subdir (e.g. 细节丰富度)")
     parser.add_argument("--port", type=int, default=8765, help="Port")
     parser.add_argument("--host", default="127.0.0.1", help="Host")
     args = parser.parse_args()
@@ -478,6 +505,34 @@ if __name__ == "__main__":
     DEFAULT_BUCKET = args.bucket
     DEFAULT_PREFIX = args.prefix
 
+    # Auto-detect subdir if not specified
+    if args.subdir:
+        DEFAULT_SUBDIR = args.subdir
+    else:
+        subdirs = bos_list_subdirs(DEFAULT_BUCKET, DEFAULT_PREFIX)
+        if not subdirs:
+            DEFAULT_SUBDIR = ""
+        elif len(subdirs) == 1:
+            DEFAULT_SUBDIR = subdirs[0]
+            print(f"Auto-selected subdir: {DEFAULT_SUBDIR}")
+        else:
+            print("\nAvailable score subdirs:")
+            for i, s in enumerate(subdirs):
+                print(f"  [{i}] {s}")
+            print(f"  [{len(subdirs)}] (all)")
+            while True:
+                try:
+                    choice = input(f"Select subdir [0-{len(subdirs)}]: ").strip()
+                    idx = int(choice)
+                    if idx == len(subdirs):
+                        DEFAULT_SUBDIR = ""
+                        break
+                    elif 0 <= idx < len(subdirs):
+                        DEFAULT_SUBDIR = subdirs[idx]
+                        break
+                except (ValueError, IndexError):
+                    pass
+
     print(f"\nScore Viewer: http://{args.host}:{args.port}")
-    print(f"BOS: {args.bucket}/{args.prefix}\n")
+    print(f"BOS: {args.bucket}/{args.prefix}" + (f"/{DEFAULT_SUBDIR}" if DEFAULT_SUBDIR else "") + "\n")
     uvicorn.run(app, host=args.host, port=args.port)

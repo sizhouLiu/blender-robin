@@ -54,19 +54,43 @@ PROMPT_TEMPLATE = [
     {"type": "input_image", "content": "texture_fidelity_closeup_all.png"},
 ]
 
-OUTPUT_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "score": {"type": "INTEGER", "description": "细节丰富度总分 0-100"},
-        "info_score": {"type": "INTEGER", "description": "细节信息量 0-60"},
-        "layer_score": {"type": "INTEGER", "description": "层次区分度 0-40"},
-        "style": {"type": "STRING", "description": "模型风格：写实/卡通/极简/工业"},
-        "asset_type": {"type": "STRING", "description": "资产类型：角色/道具/场景"},
-        "grade": {"type": "STRING", "description": "good/medium/bad"},
-        "issues": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "扣分原因"},
+OUTPUT_SPEC = [
+    {
+        "name": "score",
+        "type": "int",
+        "description": "细节丰富度总分 0-100"
     },
-    "required": ["score", "info_score", "layer_score", "style", "asset_type", "grade", "issues"],
-}
+    {
+        "name": "info_score",
+        "type": "int",
+        "description": "细节信息量 0-60"
+    },
+    {
+        "name": "layer_score",
+        "type": "int",
+        "description": "层次区分度 0-40"
+    },
+    {
+        "name": "style",
+        "type": "string",
+        "description": "模型风格：写实/卡通/极简/工业"
+    },
+    {
+        "name": "asset_type",
+        "type": "string",
+        "description": "资产类型：角色/道具/场景"
+    },
+    {
+        "name": "grade",
+        "type": "string",
+        "description": "good/medium/bad"
+    },
+    {
+        "name": "issues",
+        "type": "list[str]",
+        "description": "扣分原因"
+    }
+]
 
 # ============================================================================
 # Main
@@ -85,5 +109,5 @@ if __name__ == "__main__":
         max_concurrent=MAX_CONCURRENT,
         global_file_paths=GLOBAL_FILE_PATHS,
         prompt_template=PROMPT_TEMPLATE,
-        output_schema=OUTPUT_SCHEMA,
+        output_schema=OUTPUT_SPEC,
     ))
