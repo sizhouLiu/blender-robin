@@ -25,7 +25,7 @@ print("-" * 80)
 
 marker = None
 count = 0
-max_show = 50  # 只显示前 50 个
+max_show = 50000  # 只显示前 50 个
 
 while count < max_show:
     kwargs = {"bucket_name": bucket, "prefix": prefix, "max_keys": 100}

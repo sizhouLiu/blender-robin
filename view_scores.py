@@ -120,28 +120,53 @@ def list_cases(
     subdir: Optional[str] = Query(default=None),
     grade: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
+    page: int = Query(default=0),
+    page_size: int = Query(default=20),
 ):
-    """List all scored cases with optional filtering."""
+    """List scored cases with server-side pagination."""
     bucket = bucket or DEFAULT_BUCKET
     prefix = prefix or DEFAULT_PREFIX
     subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     case_ids = bos_list_case_ids(bucket, prefix, subdir)
     subdir_part = f"{subdir}/" if subdir else ""
 
+    # Filter by search first (cheap, no BOS calls)
+    if search:
+        case_ids = [cid for cid in case_ids if search.lower() in cid.lower()]
+
+    total_all = len(case_ids)
+
+    # If grade filter is set, we need to read JSONs to filter
+    # For performance, only read the minimal window needed
+    if grade:
+        filtered = []
+        for case_id in case_ids:
+            try:
+                score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
+                if score_data.get("grade") == grade:
+                    filtered.append(case_id)
+            except Exception:
+                continue
+        case_ids = filtered
+
+    total_filtered = len(case_ids)
+
+    # Paginate
+    start = page * page_size
+    end = start + page_size
+    page_ids = case_ids[start:end]
+
+    # Only fetch details for current page
     results = []
-    for case_id in case_ids:
-        if search and search.lower() not in case_id.lower():
-            continue
+    for case_id in page_ids:
         try:
             score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
         except Exception:
             continue
-        if grade and score_data.get("grade") != grade:
-            continue
         images = [Path(k).name for k in bos_list_images(bucket, prefix, case_id)]
         results.append({"case_id": case_id, "images": images, **score_data})
 
-    return {"total": len(results), "cases": results}
+    return {"total": total_filtered, "total_all": total_all, "page": page, "page_size": page_size, "cases": results}
 
 
 @app.get("/api/case/{case_id}")
@@ -237,6 +262,75 @@ def set_mark(
         bucket, key, json.dumps(marks, ensure_ascii=False)
     )
     return {"ok": True, "case_id": case_id, "mark": mark}
+
+
+@app.get("/api/stats")
+def get_stats(
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
+):
+    """Get aggregate statistics (loaded independently from page data)."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
+    case_ids = bos_list_case_ids(bucket, prefix, subdir)
+    subdir_part = f"{subdir}/" if subdir else ""
+
+    total = 0
+    good = 0
+    medium = 0
+    bad = 0
+    score_sum = 0
+
+    for case_id in case_ids:
+        try:
+            score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
+            total += 1
+            grade = score_data.get("grade", "")
+            if grade == "good":
+                good += 1
+            elif grade == "medium":
+                medium += 1
+            elif grade == "bad":
+                bad += 1
+            score_sum += score_data.get("score", 0)
+        except Exception:
+            continue
+
+    avg_score = round(score_sum / total, 1) if total > 0 else 0
+
+    # Read marks
+    marks_key = f"{prefix}/marks/{subdir_part}marks.json"
+    try:
+        marks_data = bos_read_json(bucket, marks_key)
+    except Exception:
+        marks_data = {}
+
+    agree = sum(1 for v in marks_data.values() if v == "agree")
+    disagree = sum(1 for v in marks_data.values() if v == "disagree")
+
+    return {
+        "total": total,
+        "good": good,
+        "medium": medium,
+        "bad": bad,
+        "agree": agree,
+        "disagree": disagree,
+        "avg_score": avg_score,
+    }
+
+
+@app.get("/api/subdirs")
+def list_subdirs(
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+):
+    """List available score subdirectories."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdirs = bos_list_subdirs(bucket, prefix)
+    return {"subdirs": subdirs}
 
 
 # ============================================================================
@@ -352,8 +446,13 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
 </div>
 <div class="nav">
     <button onclick="prevPage()">← Prev</button>
+    <input id="page-jump" type="number" min="1" style="width:60px; padding:4px; background:#0f3460; color:#eee; border:1px solid #333; border-radius:3px; text-align:center;" placeholder="Page">
+    <button onclick="jumpToPage()">Go</button>
     <span id="page-info" style="padding:8px; color:#888;"></span>
     <button onclick="nextPage()">Next →</button>
+    <select id="subdir-switch" style="margin-left:16px; padding:4px 8px; background:#0f3460; color:#eee; border:1px solid #333; border-radius:3px;" onchange="switchSubdir()">
+        <option value="">Loading subdirs...</option>
+    </select>
 </div>
 <div class="modal" id="modal" onclick="closeModal()">
     <img id="modal-img">
@@ -365,9 +464,28 @@ const PREFIX = "{prefix}";
 const SUBDIR = "{subdir}";
 const PAGE_SIZE = 20;
 let allCases = [];
+let totalCases = 0;
+let totalPages = 1;
 let marks = {{}};
 let page = 0;
 let searchTimeout = null;
+
+function formatSubScores(c) {{
+    const excludeKeys = ['score', 'grade', 'issues', 'case_id', 'images'];
+    const parts = [];
+    for (const [key, val] of Object.entries(c)) {{
+        if (excludeKeys.includes(key)) continue;
+        if (key.endsWith('_score')) {{
+            // Score fields: show as "key: value"
+            const label = key.replace('_score', '');
+            parts.push(`${{label}}: ${{val || 0}}`);
+        }} else {{
+            // Metadata fields: show as "value" only
+            if (val) parts.push(String(val));
+        }}
+    }}
+    return parts.join(' | ');
+}}
 
 async function loadMarks() {{
     try {{
@@ -375,6 +493,22 @@ async function loadMarks() {{
         marks = await resp.json();
     }} catch(e) {{
         marks = {{}};
+    }}
+}}
+
+async function loadStats() {{
+    try {{
+        const resp = await fetch(`/api/stats?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}`);
+        const s = await resp.json();
+        document.getElementById('stat-total').textContent = s.total;
+        document.getElementById('stat-good').textContent = s.good;
+        document.getElementById('stat-medium').textContent = s.medium;
+        document.getElementById('stat-bad').textContent = s.bad;
+        document.getElementById('stat-agree').textContent = s.agree;
+        document.getElementById('stat-disagree').textContent = s.disagree;
+        document.getElementById('stat-avg').textContent = s.avg_score;
+    }} catch(e) {{
+        // Stats loading failed silently
     }}
 }}
 
@@ -390,7 +524,7 @@ async function loadCases() {{
     const grade = document.getElementById('grade-filter').value;
     const search = document.getElementById('search').value;
     const markFilter = document.getElementById('mark-filter').value;
-    let url = `/api/cases?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}`;
+    let url = `/api/cases?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}&page=${{page}}&page_size=${{PAGE_SIZE}}`;
     if (grade) url += `&grade=${{grade}}`;
     if (search) url += `&search=${{encodeURIComponent(search)}}`;
 
@@ -398,7 +532,7 @@ async function loadCases() {{
     const resp = await fetch(url);
     const data = await resp.json();
 
-    // Apply mark filter
+    // Apply mark filter client-side (marks are local)
     if (markFilter === 'agree') {{
         allCases = data.cases.filter(c => marks[c.case_id] === 'agree');
     }} else if (markFilter === 'disagree') {{
@@ -409,46 +543,21 @@ async function loadCases() {{
         allCases = data.cases;
     }}
 
-    // Update statistics
-    updateStats(allCases);
+    totalCases = data.total;
+    totalPages = Math.ceil(data.total / PAGE_SIZE);
 
-    document.getElementById('stats').textContent = `${{allCases.length}} / ${{data.total}} cases`;
-    page = 0;
+    document.getElementById('stats').textContent = `${{data.total}} cases (showing ${{allCases.length}})`;
+    document.getElementById('page-info').textContent = `${{page + 1}} / ${{totalPages}}`;
     renderPage();
 }}
 
-function updateStats(cases) {{
-    const total = cases.length;
-    const good = cases.filter(c => c.grade === 'good').length;
-    const medium = cases.filter(c => c.grade === 'medium').length;
-    const bad = cases.filter(c => c.grade === 'bad').length;
-    const agree = cases.filter(c => marks[c.case_id] === 'agree').length;
-    const disagree = cases.filter(c => marks[c.case_id] === 'disagree').length;
-    const avgScore = total > 0 ? (cases.reduce((sum, c) => sum + (c.score || 0), 0) / total).toFixed(1) : 0;
-
-    document.getElementById('stat-total').textContent = total;
-    document.getElementById('stat-good').textContent = good;
-    document.getElementById('stat-medium').textContent = medium;
-    document.getElementById('stat-bad').textContent = bad;
-    document.getElementById('stat-agree').textContent = agree;
-    document.getElementById('stat-disagree').textContent = disagree;
-    document.getElementById('stat-avg').textContent = avgScore;
-}}
-
 function renderPage() {{
-    const start = page * PAGE_SIZE;
-    const end = start + PAGE_SIZE;
-    const slice = allCases.slice(start, end);
-    const totalPages = Math.ceil(allCases.length / PAGE_SIZE);
-
-    document.getElementById('page-info').textContent = `${{page + 1}} / ${{totalPages}}`;
-
-    if (!slice.length) {{
+    if (!allCases.length) {{
         document.getElementById('grid').innerHTML = '<div class="loading">No results</div>';
         return;
     }}
 
-    document.getElementById('grid').innerHTML = slice.map(c => {{
+    document.getElementById('grid').innerHTML = allCases.map(c => {{
         const gradeClass = 'grade-' + (c.grade || 'unknown');
         const issues = (c.issues || []).join(', ');
         const caseId = c.case_id;
@@ -471,7 +580,7 @@ function renderPage() {{
                 <div class="card-score">${{c.score || 0}}<span style="font-size:14px;color:#888">/100</span>
                     <span class="grade ${{gradeClass}}">${{c.grade || '?'}}</span>
                 </div>
-                <div class="card-meta">info: ${{c.info_score || 0}}/60 | layer: ${{c.layer_score || 0}}/40 | ${{c.style || ''}} | ${{c.asset_type || ''}}</div>
+                <div class="card-meta">${{formatSubScores(c)}}</div>
                 ${{issues ? `<div class="issues">${{issues}}</div>` : ''}}
                 ${{markBtns}}
             </div>
@@ -479,18 +588,45 @@ function renderPage() {{
     }}).join('');
 }}
 
-function nextPage() {{ if ((page + 1) * PAGE_SIZE < allCases.length) {{ page++; renderPage(); window.scrollTo(0,0); }} }}
-function prevPage() {{ if (page > 0) {{ page--; renderPage(); window.scrollTo(0,0); }} }}
+function nextPage() {{ if (page < totalPages - 1) {{ page++; loadCases(); window.scrollTo(0,0); }} }}
+function prevPage() {{ if (page > 0) {{ page--; loadCases(); window.scrollTo(0,0); }} }}
+function jumpToPage() {{
+    const input = document.getElementById('page-jump');
+    let target = parseInt(input.value);
+    if (isNaN(target) || target < 1) target = 1;
+    if (target > totalPages) target = totalPages;
+    page = target - 1;
+    input.value = '';
+    loadCases();
+    window.scrollTo(0,0);
+}}
 function openModal(src) {{ document.getElementById('modal').classList.add('active'); document.getElementById('modal-img').src = src; }}
 function closeModal() {{ document.getElementById('modal').classList.remove('active'); }}
 
+async function loadSubdirs() {{
+    const resp = await fetch(`/api/subdirs?bucket=${{BUCKET}}&prefix=${{PREFIX}}`);
+    const data = await resp.json();
+    const select = document.getElementById('subdir-switch');
+    select.innerHTML = `<option value="">(root)</option>` + data.subdirs.map(s => `<option value="${{s}}" ${{s === SUBDIR ? 'selected' : ''}}>${{s}}</option>`).join('');
+}}
+
+function switchSubdir() {{
+    const subdir = document.getElementById('subdir-switch').value;
+    window.location.href = `/?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{encodeURIComponent(subdir)}}`;
+}}
+
 document.getElementById('search').addEventListener('input', () => {{
     clearTimeout(searchTimeout);
+    page = 0;
     searchTimeout = setTimeout(loadCases, 300);
 }});
-document.getElementById('grade-filter').addEventListener('change', loadCases);
-document.getElementById('mark-filter').addEventListener('change', loadCases);
+document.getElementById('grade-filter').addEventListener('change', () => {{ page = 0; loadCases(); }});
+document.getElementById('mark-filter').addEventListener('change', () => {{ page = 0; loadCases(); }});
+document.getElementById('page-jump').addEventListener('keydown', e => {{
+    if (e.key === 'Enter') {{ e.preventDefault(); jumpToPage(); }}
+}});
 document.addEventListener('keydown', e => {{
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.key === 'Escape') closeModal();
     if (e.key === 'ArrowLeft') prevPage();
     if (e.key === 'ArrowRight') nextPage();
@@ -499,6 +635,8 @@ document.addEventListener('keydown', e => {{
 (async () => {{
     await loadMarks();
     loadCases();
+    loadSubdirs();
+    loadStats();  // 异步加载，不阻塞页面
 }})();
 </script>
 </body>
