@@ -438,10 +438,14 @@ async def run_scoring(
     output_subdir: subdirectory under output/ for this task's results.
     Defaults to the stem of the calling script's filename (e.g. '细节丰富度').
     """
-    import inspect
+    import sys
     if output_subdir is None:
-        caller_frame = inspect.stack()[1]
-        output_subdir = Path(caller_frame.filename).stem
+        main_module = sys.modules.get("__main__")
+        if main_module and getattr(main_module, "__file__", None):
+            output_subdir = Path(main_module.__file__).stem
+        else:
+            output_subdir = ""
+    logger.info(f"Output subdir: '{output_subdir}'")
     client = get_bos_client(bos_endpoint, bos_access_key, bos_secret_key)
 
     bucket, storage_dir = parse_storage_location(global_file_paths)
