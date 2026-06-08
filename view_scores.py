@@ -75,7 +75,7 @@ def bos_list_subdirs(bucket: str, prefix: str) -> list:
     return sorted(subdirs)
 
 
-(bucket: str, prefix: str, subdir: str = "") -> list:
+def bos_list_case_ids(bucket: str, prefix: str, subdir: str = "") -> list:
     """List all case IDs that have output JSON."""
     subdir_part = f"{subdir}/" if subdir else ""
     output_prefix = f"{prefix}/output/{subdir_part}"
@@ -115,13 +115,16 @@ def bos_list_images(bucket: str, prefix: str, case_id: str) -> list:
 
 @app.get("/api/cases")
 def list_cases(
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
-    subdir: str = Query(default=DEFAULT_SUBDIR),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
     grade: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
 ):
     """List all scored cases with optional filtering."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     case_ids = bos_list_case_ids(bucket, prefix, subdir)
     subdir_part = f"{subdir}/" if subdir else ""
 
@@ -144,11 +147,14 @@ def list_cases(
 @app.get("/api/case/{case_id}")
 def get_case(
     case_id: str,
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
-    subdir: str = Query(default=DEFAULT_SUBDIR),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
 ):
     """Get score and image list for a single case."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     subdir_part = f"{subdir}/" if subdir else ""
     try:
         score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
@@ -164,10 +170,12 @@ def get_case(
 def get_image(
     case_id: str,
     filename: str,
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
 ):
     """Proxy an image from BOS."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
     key = f"{prefix}/input/{case_id}/{filename}"
     try:
         data = bos_read_bytes(bucket, key)
@@ -183,11 +191,14 @@ def get_image(
 
 @app.get("/api/marks")
 def get_marks(
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
-    subdir: str = Query(default=DEFAULT_SUBDIR),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
 ):
     """Get all marks (agree/disagree)."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     subdir_part = f"{subdir}/" if subdir else ""
     key = f"{prefix}/marks/{subdir_part}marks.json"
     try:
@@ -201,11 +212,14 @@ def get_marks(
 def set_mark(
     case_id: str,
     mark: str = Query(..., description="agree or disagree or clear"),
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
-    subdir: str = Query(default=DEFAULT_SUBDIR),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
 ):
     """Mark a case as agree/disagree."""
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     subdir_part = f"{subdir}/" if subdir else ""
     key = f"{prefix}/marks/{subdir_part}marks.json"
     try:
@@ -231,10 +245,13 @@ def set_mark(
 
 @app.get("/", response_class=HTMLResponse)
 def index(
-    bucket: str = Query(default=DEFAULT_BUCKET),
-    prefix: str = Query(default=DEFAULT_PREFIX),
-    subdir: str = Query(default=DEFAULT_SUBDIR),
+    bucket: Optional[str] = Query(default=None),
+    prefix: Optional[str] = Query(default=None),
+    subdir: Optional[str] = Query(default=None),
 ):
+    bucket = bucket or DEFAULT_BUCKET
+    prefix = prefix or DEFAULT_PREFIX
+    subdir = subdir if subdir is not None else DEFAULT_SUBDIR
     return f"""<!DOCTYPE html>
 <html>
 <head>
