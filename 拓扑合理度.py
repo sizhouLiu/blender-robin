@@ -20,12 +20,12 @@ MODEL_NAME = "gemini-3.1-flash-lite-preview-m-high-t-low-temp-0.00"
 RPM = 30                # Requests per minute
 MAX_RETRIES = 3         # Max retries for failed cases
 MAX_CONCURRENT = 10     # Max concurrent requests
-
-GLOBAL_FILE_example_topo_good_full_png = "bos://uv-test/robin_renders/global/wireframe/example_topo_good_full.png"
-GLOBAL_FILE_example_topo_good_close_png = "bos://uv-test/robin_renders/global/wireframe/example_topo_good_close.png"
-GLOBAL_FILE_example_topo_bad_full_png = "bos://uv-test/robin_renders/global/wireframe/example_topo_bad_full.png"
-GLOBAL_FILE_example_topo_bad_close_png = "bos://uv-test/robin_renders/global/wireframe/example_topo_bad_close.png"
-
+GLOBAL_FILE_PATHS = {
+    "GLOBAL_FILE_example_topo_good_full_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_good_full.png",
+    "GLOBAL_FILE_example_topo_good_close_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_good_close.png",
+    "GLOBAL_FILE_example_topo_bad_full_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_full.png",
+    "GLOBAL_FILE_example_topo_bad_close_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_close.png"
+}
 # ============================================================================
 # Task configuration (auto-generated from CapArena task)
 # ============================================================================
