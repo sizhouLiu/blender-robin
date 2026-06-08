@@ -16,17 +16,17 @@ from score_engine import run_scoring
 # 任务配置 - 只需修改这部分
 # ============================================================================
 
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-3.5-flash"
 RPM = 30
-MAX_RETRIES = 3
+MAX_RETRIES = 5
 MAX_CONCURRENT = 10
 
 # 全局示例图 BOS 路径
 GLOBAL_FILE_PATHS = {
-    "GLOBAL_FILE_example_detail_good_overall_png": "bos://cap-arena/细节丰富度v4/global/example_detail_good_overall.png",
-    "GLOBAL_FILE_example_detail_good_closeup_png": "bos://cap-arena/细节丰富度v4/global/example_detail_good_closeup.png",
-    "GLOBAL_FILE_example_detail_bad_overall_png": "bos://cap-arena/细节丰富度v4/global/example_detail_bad_overall.png",
-    "GLOBAL_FILE_example_detail_bad_closeup_png": "bos://cap-arena/细节丰富度v4/global/example_detail_bad_closeup.png",
+    "GLOBAL_FILE_example_detail_good_overall_png": "bos://rgb-test/robin_renders/rgb_closeup/global/example_detail_good_overall.png",
+    "GLOBAL_FILE_example_detail_good_closeup_png": "bos://rgb-test/robin_renders/rgb_closeup/global/example_detail_good_closeup.png",
+    "GLOBAL_FILE_example_detail_bad_overall_png": "bos://rgb-test/robin_renders/rgb_closeup/global/example_detail_bad_overall.png",
+    "GLOBAL_FILE_example_detail_bad_closeup_png": "bos://rgb-test/robin_renders/rgb_closeup/global/example_detail_bad_closeup.png",
 }
 
 PROMPT_TEMPLATE = [

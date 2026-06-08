@@ -347,10 +347,20 @@ async def run_scoring(
     logger.info(f"RPM: {rpm}, MAX_CONCURRENT: {max_concurrent}, MAX_RETRIES: {max_retries}")
 
     case_ids = load_case_ids(client, bucket, storage_dir)
+    logger.info(f"Total cases: {len(case_ids)}, checking for existing outputs (resume mode)...")
 
-    # Filter already completed
-    pending = [cid for cid in case_ids if not check_output_exists(client, cid, bucket, storage_dir)]
-    logger.info(f"Total cases: {len(case_ids)}")
+    # 并发检查哪些已有输出，避免串行 BOS 调用在大量 case 下耗时过长
+    check_sem = asyncio.Semaphore(20)
+
+    async def _exists_async(cid: str) -> bool:
+        async with check_sem:
+            return await asyncio.to_thread(check_output_exists, client, cid, bucket, storage_dir)
+
+    exists_flags = await asyncio.gather(*[_exists_async(cid) for cid in case_ids])
+    pending = [cid for cid, done in zip(case_ids, exists_flags) if not done]
+    skipped_count = len(case_ids) - len(pending)
+
+    logger.info(f"Resume: {skipped_count} already done, {len(pending)} pending")
 
     if not pending:
         logger.info("Nothing to do. All cases already completed.")
