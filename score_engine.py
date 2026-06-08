@@ -91,6 +91,40 @@ def extract_input_filenames(prompt_template: list) -> list:
     return [item["content"] for item in prompt_template if item.get("type") == "input_image"]
 
 
+_SPEC_TYPE_MAP = {
+    "int":      ("INTEGER", False),
+    "float":    ("NUMBER",  False),
+    "string":   ("STRING",  False),
+    "str":      ("STRING",  False),
+    "bool":     ("BOOLEAN", False),
+    "list[str]": ("STRING", True),
+    "list[int]": ("INTEGER", True),
+    "list[float]": ("NUMBER", True),
+}
+
+def spec_to_schema(output_spec: list) -> dict:
+    """Convert OUTPUT_SPEC list to Gemini responseSchema dict."""
+    if isinstance(output_spec, dict):
+        return output_spec  # already a raw schema, pass through
+    properties = {}
+    required = []
+    for field in output_spec:
+        name = field["name"]
+        raw_type = field.get("type", "string").lower().strip()
+        desc = field.get("description", "")
+        gemini_type, is_array = _SPEC_TYPE_MAP.get(raw_type, ("STRING", False))
+        if is_array:
+            properties[name] = {
+                "type": "ARRAY",
+                "items": {"type": gemini_type},
+                "description": desc,
+            }
+        else:
+            properties[name] = {"type": gemini_type, "description": desc}
+        required.append(name)
+    return {"type": "OBJECT", "properties": properties, "required": required}
+
+
 # ============================================================================
 # Image preprocessing
 # ============================================================================
@@ -203,7 +237,7 @@ async def call_api(
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "responseSchema": output_schema,
+            "responseSchema": spec_to_schema(output_schema),
         },
     }
 
