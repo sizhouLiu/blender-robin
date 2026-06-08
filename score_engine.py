@@ -216,7 +216,8 @@ async def call_api(
     deerapi_key: str,
 ) -> dict:
     """Call Gemini API for a single case."""
-    prompt_parts = build_prompt(
+    prompt_parts = await asyncio.to_thread(
+        build_prompt,
         client, case_id, bucket, storage_dir,
         prompt_template, global_file_paths, input_filenames
     )
@@ -321,13 +322,20 @@ async def process_case(
                 stats["success"] += 1
                 return
             except Exception as e:
+                import traceback
+                detail = str(e) or repr(e)
+                if hasattr(e, "response"):
+                    try:
+                        detail += f" | HTTP {e.response.status_code}: {e.response.text[:500]}"
+                    except Exception:
+                        pass
                 if attempt < max_retries:
-                    logger.warning(f"Case {case_id} failed (attempt {attempt}/{max_retries}): {e}")
+                    logger.warning(f"Case {case_id} failed (attempt {attempt}/{max_retries}): {detail}")
                     stats["retrying"] += 1
                     await asyncio.sleep(2 ** attempt)
                     stats["retrying"] -= 1
                 else:
-                    logger.error(f"Case {case_id} failed after {max_retries} attempts: {e}")
+                    logger.error(f"Case {case_id} failed after {max_retries} attempts: {detail}\n{traceback.format_exc()}")
                     stats["failed"] += 1
                     stats["failed_cases"].append(case_id)
 
@@ -421,25 +429,33 @@ async def run_scoring(
     }
 
     semaphore = asyncio.Semaphore(max_concurrent)
-    delay = 60.0 / rpm
+    # Token bucket: refill 1 token every (60/rpm) seconds
+    rate_interval = 60.0 / rpm
+    rate_lock = asyncio.Lock()
+    next_allowed = [time.monotonic()]
+
+    async def rate_limited_process(case_id):
+        async with rate_lock:
+            now = time.monotonic()
+            wait = next_allowed[0] - now
+            if wait > 0:
+                await asyncio.sleep(wait)
+            next_allowed[0] = max(next_allowed[0], time.monotonic()) + rate_interval
+        await process_case(
+            case_id, semaphore, stats, client, bucket, storage_dir,
+            prompt_template, global_file_paths, input_filenames,
+            output_schema, model_name, deerapi_base_url, deerapi_key, max_retries, output_subdir
+        )
+
     start_time = time.monotonic()
 
-    tasks = []
-    for i, case_id in enumerate(pending):
-        task = asyncio.create_task(
-            process_case(
-                case_id, semaphore, stats, client, bucket, storage_dir,
-                prompt_template, global_file_paths, input_filenames,
-                output_schema, model_name, deerapi_base_url, deerapi_key, max_retries, output_subdir
-            )
-        )
-        tasks.append(task)
-
-        # Progress display
+    async def tracked(case_id):
+        await rate_limited_process(case_id)
         elapsed = time.monotonic() - start_time
         completed = stats["success"] + stats["failed"] + stats["skipped"]
-        eta = (len(pending) - completed) * delay if completed > 0 else 0
-        eta_str = f"{int(eta // 3600)}h{int((eta % 3600) // 60)}m" if eta > 0 else "..."
+        rate = completed / elapsed * 60 if elapsed > 0 else 0
+        eta = (len(pending) - completed) / rate * 60 if rate > 0 else 0
+        eta_str = f"{int(eta // 3600)}h{int((eta % 3600) // 60)}m{int(eta % 60)}s" if eta > 0 else "..."
         sys.stdout.write(
             f"\r[{completed}/{len(pending)}] elapsed: {int(elapsed // 60)}m{int(elapsed % 60)}s | "
             f"eta: {eta_str} | success: {stats['success']}, failed: {stats['failed']}, "
@@ -447,10 +463,7 @@ async def run_scoring(
         )
         sys.stdout.flush()
 
-        if (i + 1) % max_concurrent == 0 or i == len(pending) - 1:
-            await asyncio.gather(*tasks)
-            tasks = []
-            await asyncio.sleep(delay)
+    await asyncio.gather(*[tracked(cid) for cid in pending])
 
     print()
     logger.info(f"Completed: {stats['success']} success, {stats['failed']} failed, {stats['skipped']} skipped")
