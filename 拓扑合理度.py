@@ -15,16 +15,19 @@ from score_engine import run_scoring
 # ============================================================================
 # 任务配置 - 只需修改这部分
 # ============================================================================
-MODEL_NAME = "gemini-3.1-flash-lite-preview-m-high-t-low-temp-0.00"
+MODEL_NAME = "gemini-3-flash-preview-m-high-t-low-temp-0.00"
 
 RPM = 30                # Requests per minute
 MAX_RETRIES = 3         # Max retries for failed cases
-MAX_CONCURRENT = 10     # Max concurrent requests
+MAX_CONCURRENT = 20     # Max concurrent requests
 GLOBAL_FILE_PATHS = {
     "GLOBAL_FILE_example_topo_good_full_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_good_full.png",
     "GLOBAL_FILE_example_topo_good_close_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_good_close.png",
     "GLOBAL_FILE_example_topo_bad_full_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_full.png",
-    "GLOBAL_FILE_example_topo_bad_close_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_close.png"
+    "GLOBAL_FILE_example_topo_bad_close_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_close.png",
+    "GLOBAL_FILE_example_topo_bad_cad_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_cad.png",
+    "GLOBAL_FILE_example_topo_bad_saomiao_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_saomiao.png",
+    "GLOBAL_FILE_example_topo_bad_auto_png": "bos://uv-test/robin_renders/wireframe/global/example_topo_bad_auto.png"
 }
 # ============================================================================
 # Task configuration (auto-generated from CapArena task)
@@ -61,7 +64,31 @@ PROMPT_TEMPLATE = [
     },
     {
         "type": "text",
-        "content": "\n【评分维度】\n1. 布线流向（edge_flow_score，45分）\n- 高分：布线顺应形体转折与轮廓，走向整洁有序\n- 低分：布线杂乱交叉、随意穿破曲面、无视形体主方向\n\n2. 面片质量（face_quality_score，35分）\n- 三角面完全允许，不扣分\n- 低分：出现细长尖锐面、星形面、退化面等形态畸形的面片\n\n3. 分布合理性（density_score，20分）\n- 高分：复杂结构面数较密，平坦区域较疏，分布自适应\n- 低分：全局无脑均匀细分，或关键轮廓面数过稀出现锯齿\n\n【分类规则】\ngood:    80~100  布线顺畅、面片健康、分布合理\nmedium:  40~79   少量瑕疵但整体可用\nbad:      0~39   布线严重混乱、大量畸形面、分布极差\n\n【输出严格按以下格式】\n{\n  \"score\": 0~100,\n  \"edge_flow_score\": 0~45,\n  \"face_quality_score\": 0~35,\n  \"density_score\": 0~20,\n  \"grade\": \"good/medium/bad\",\n  \"issues\": []\n}"
+        "content": "\n【bad 示例2】\n- CAD转换数据，拓扑结构极其混乱，存在大量无意义的超长细条状三角面, 布线完全没有形体逻辑，面数分布极端不合理，评分极低。给定bad"
+    },
+        {
+        "type": "image",
+        "content": "example_topo_bad_cad.png"
+    },
+        {
+        "type": "text",
+        "content": "\n【bad 示例3】\n- 扫描数据，模型存在严重的布线杂乱，缺乏合理的形体逻辑, 面片密度分布极度不合理，平坦区域存在过度细分的冗余数据, 特写显示面片形态退化，存在大量无效三角面,评分极低。给定bad"
+    },
+        {
+        "type": "image",
+        "content": "example_topo_bad_saomiao.png"
+    },
+    {
+        "type": "text",
+        "content": "\n【bad 示例4】\n- 自动拓扑、自动布线数据，模型布线主要为均匀的三角面网格，缺乏针对形体特征的流向引导, 表面布线密度过高且均匀，存在明显的面数浪费现象，缺乏自适应分布,没有手工布线的结构美感，评分极低。给定bad"
+    },
+        {
+        "type": "image",
+        "content": "example_topo_bad_auto.png"
+    },
+    {
+        "type": "text",
+        "content": "\n【评分维度】\n1. 布线流向（edge_flow_score，45分）\n- 高分：布线顺应形体转折与轮廓，走向整洁有序\n- 低分：布线杂乱交叉、随意穿破曲面、无视形体主方向\n\n2. 面片质量（face_quality_score，35分）\n- 三角面完全允许，不扣分\n- 低分：出现细长尖锐面、星形面、退化面等形态畸形的面片\n\n3. 分布合理性（density_score，20分）\n- 高分：复杂结构面数较密，平坦区域较疏，分布自适应\n- 低分：全局无脑均匀细分给0分，或关键轮廓面数过稀出现锯齿 \n\n【分类规则】\ngood:    80~100  布线顺畅、面片健康、分布合理\nmedium:  40~79   少量瑕疵但整体可用\nbad:      0~39   布线严重混乱、大量畸形面、分布极差\n\n【输出严格按以下格式】\n{\n  \"score\": 0~100,\n  \"edge_flow_score\": 0~45,\n  \"face_quality_score\": 0~35,\n  \"density_score\": 0~20,\n  \"grade\": \"good/medium/bad\",\n  \"issues\": []\n}"
     },
     {
         "type": "input_image",
@@ -123,4 +150,5 @@ if __name__ == "__main__":
         global_file_paths=GLOBAL_FILE_PATHS,
         prompt_template=PROMPT_TEMPLATE,
         output_schema=OUTPUT_SPEC,
+        output_subdir="拓扑合理度-添加自动拓扑为bad版-大模型版本"
     ))

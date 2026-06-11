@@ -333,6 +333,41 @@ def list_subdirs(
     return {"subdirs": subdirs}
 
 
+@app.get("/api/prefixes")
+def list_prefixes(
+    bucket: Optional[str] = Query(default=None),
+    base_prefix: Optional[str] = Query(default=None),
+):
+    """List available render type prefixes (e.g., uv_check, rgb_closeup, normal_map)."""
+    bucket = bucket or DEFAULT_BUCKET
+    if base_prefix is None:
+        # Extract base from DEFAULT_PREFIX: "robin_renders/rgb_closeup" -> "robin_renders/"
+        parts = DEFAULT_PREFIX.split("/")
+        base_prefix = parts[0] + "/" if parts else ""
+
+    prefixes = []
+    response = _bos_client.list_objects(
+        bucket_name=bucket, prefix=base_prefix, delimiter="/", max_keys=1000
+    )
+    if hasattr(response, "common_prefixes") and response.common_prefixes:
+        for cp in response.common_prefixes:
+            name = cp.prefix[len(base_prefix):].rstrip("/")
+            if name:
+                prefixes.append(name)
+    return {"bucket": bucket, "base_prefix": base_prefix, "prefixes": prefixes}
+
+
+@app.get("/api/buckets")
+def list_buckets():
+    """List available BOS buckets."""
+    try:
+        response = _bos_client.list_buckets()
+        buckets = [b.name for b in response.buckets] if hasattr(response, 'buckets') else []
+        return {"buckets": buckets}
+    except Exception as e:
+        return {"buckets": [], "error": str(e)}
+
+
 # ============================================================================
 # Frontend HTML
 # ============================================================================
@@ -395,6 +430,9 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
 <div class="header">
     <h1>Score Viewer</h1>
     <div class="controls">
+        <select id="bucket-switch" title="Bucket"></select>
+        <select id="prefix-switch" title="Render Type"></select>
+        <select id="subdir-switch" title="Score Task"></select>
         <input id="search" type="text" placeholder="Search case ID...">
         <select id="grade-filter">
             <option value="">All grades</option>
@@ -450,9 +488,6 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
     <button onclick="jumpToPage()">Go</button>
     <span id="page-info" style="padding:8px; color:#888;"></span>
     <button onclick="nextPage()">Next →</button>
-    <select id="subdir-switch" style="margin-left:16px; padding:4px 8px; background:#0f3460; color:#eee; border:1px solid #333; border-radius:3px;" onchange="switchSubdir()">
-        <option value="">Loading subdirs...</option>
-    </select>
 </div>
 <div class="modal" id="modal" onclick="closeModal()">
     <img id="modal-img">
@@ -603,17 +638,57 @@ function jumpToPage() {{
 function openModal(src) {{ document.getElementById('modal').classList.add('active'); document.getElementById('modal-img').src = src; }}
 function closeModal() {{ document.getElementById('modal').classList.remove('active'); }}
 
+async function loadBuckets() {{
+    try {{
+        const resp = await fetch('/api/buckets');
+        const data = await resp.json();
+        const select = document.getElementById('bucket-switch');
+        select.innerHTML = data.buckets.map(b => `<option value="${{b}}" ${{b === BUCKET ? 'selected' : ''}}>${{b}}</option>`).join('');
+    }} catch(e) {{
+        document.getElementById('bucket-switch').innerHTML = `<option value="${{BUCKET}}" selected>${{BUCKET}}</option>`;
+    }}
+}}
+
+async function loadPrefixes() {{
+    const bucket = document.getElementById('bucket-switch').value || BUCKET;
+    const basePrefix = PREFIX.split('/')[0] + '/';
+    const resp = await fetch(`/api/prefixes?bucket=${{bucket}}&base_prefix=${{encodeURIComponent(basePrefix)}}`);
+    const data = await resp.json();
+    const select = document.getElementById('prefix-switch');
+    const currentType = PREFIX.split('/').slice(1).join('/');
+    select.innerHTML = data.prefixes.map(p => `<option value="${{p}}" ${{p === currentType ? 'selected' : ''}}>${{p}}</option>`).join('');
+}}
+
 async function loadSubdirs() {{
-    const resp = await fetch(`/api/subdirs?bucket=${{BUCKET}}&prefix=${{PREFIX}}`);
+    const bucket = document.getElementById('bucket-switch').value || BUCKET;
+    const basePrefix = PREFIX.split('/')[0];
+    const renderType = document.getElementById('prefix-switch').value || PREFIX.split('/').slice(1).join('/');
+    const fullPrefix = basePrefix + '/' + renderType;
+    const resp = await fetch(`/api/subdirs?bucket=${{bucket}}&prefix=${{encodeURIComponent(fullPrefix)}}`);
     const data = await resp.json();
     const select = document.getElementById('subdir-switch');
     select.innerHTML = `<option value="">(root)</option>` + data.subdirs.map(s => `<option value="${{s}}" ${{s === SUBDIR ? 'selected' : ''}}>${{s}}</option>`).join('');
 }}
 
-function switchSubdir() {{
+function switchView() {{
+    const bucket = document.getElementById('bucket-switch').value;
+    const basePrefix = PREFIX.split('/')[0];
+    const renderType = document.getElementById('prefix-switch').value;
     const subdir = document.getElementById('subdir-switch').value;
-    window.location.href = `/?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{encodeURIComponent(subdir)}}`;
+    const fullPrefix = basePrefix + '/' + renderType;
+    window.location.href = `/?bucket=${{encodeURIComponent(bucket)}}&prefix=${{encodeURIComponent(fullPrefix)}}&subdir=${{encodeURIComponent(subdir)}}`;
 }}
+
+document.getElementById('bucket-switch').addEventListener('change', async () => {{
+    await loadPrefixes();
+    await loadSubdirs();
+    switchView();
+}});
+document.getElementById('prefix-switch').addEventListener('change', async () => {{
+    await loadSubdirs();
+    switchView();
+}});
+document.getElementById('subdir-switch').addEventListener('change', () => {{ switchView(); }});
 
 document.getElementById('search').addEventListener('input', () => {{
     clearTimeout(searchTimeout);
@@ -633,10 +708,12 @@ document.addEventListener('keydown', e => {{
 }});
 
 (async () => {{
+    await loadBuckets();
+    await loadPrefixes();
+    await loadSubdirs();
     await loadMarks();
     loadCases();
-    loadSubdirs();
-    loadStats();  // 异步加载，不阻塞页面
+    loadStats();
 }})();
 </script>
 </body>
