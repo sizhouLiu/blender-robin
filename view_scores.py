@@ -44,6 +44,32 @@ DEFAULT_SUBDIR = os.environ.get("VIEW_SUBDIR", "")
 app = FastAPI(title="Score Viewer")
 
 
+@app.on_event("startup")
+async def preload_metadata():
+    """Background preload all case metadata on startup."""
+    import threading
+
+    def _preload():
+        bucket = DEFAULT_BUCKET
+        prefix = DEFAULT_PREFIX
+        subdir = DEFAULT_SUBDIR
+        case_ids = bos_list_case_ids(bucket, prefix, subdir)
+        logger.info(f"Preloading metadata for {len(case_ids)} cases...")
+        loaded = 0
+        for case_id in case_ids:
+            get_case_metadata(bucket, prefix, subdir, case_id)
+            loaded += 1
+            if loaded % 100 == 0:
+                logger.info(f"  Preloaded {loaded}/{len(case_ids)}")
+        logger.info(f"Metadata preload complete: {loaded} cases cached")
+
+    threading.Thread(target=_preload, daemon=True).start()
+
+
+import logging as _logging
+logger = _logging.getLogger(__name__)
+
+
 # ============================================================================
 # BOS Helpers
 # ============================================================================
@@ -110,6 +136,44 @@ def bos_list_images(bucket: str, prefix: str, case_id: str) -> list:
 
 
 # ============================================================================
+# Lazy cache for case metadata (grade, score)
+# ============================================================================
+
+from datetime import datetime, timedelta
+
+_metadata_cache = {}  # {(bucket, prefix, subdir, case_id): {"grade": ..., "score": ..., "expires": datetime}}
+_CACHE_TTL = timedelta(minutes=5)
+
+def get_case_metadata(bucket: str, prefix: str, subdir: str, case_id: str) -> dict:
+    """Get case metadata with lazy cache."""
+    key = (bucket, prefix, subdir, case_id)
+    now = datetime.now()
+
+    # Check cache
+    if key in _metadata_cache:
+        cached = _metadata_cache[key]
+        if cached["expires"] > now:
+            return {"grade": cached["grade"], "score": cached["score"]}
+
+    # Cache miss or expired, read from BOS
+    subdir_part = f"{subdir}/" if subdir else ""
+    try:
+        score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
+        grade = score_data.get("grade")
+        score = score_data.get("score", 0)
+
+        # Store in cache
+        _metadata_cache[key] = {
+            "grade": grade,
+            "score": score,
+            "expires": now + _CACHE_TTL
+        }
+        return {"grade": grade, "score": score}
+    except Exception:
+        return {"grade": None, "score": 0}
+
+
+# ============================================================================
 # API Routes
 # ============================================================================
 
@@ -120,6 +184,9 @@ def list_cases(
     subdir: Optional[str] = Query(default=None),
     grade: Optional[str] = Query(default=None),
     search: Optional[str] = Query(default=None),
+    score_min: Optional[int] = Query(default=None),
+    score_max: Optional[int] = Query(default=None),
+    mark: Optional[str] = Query(default=None),
     page: int = Query(default=0),
     page_size: int = Query(default=20),
 ):
@@ -130,24 +197,46 @@ def list_cases(
     case_ids = bos_list_case_ids(bucket, prefix, subdir)
     subdir_part = f"{subdir}/" if subdir else ""
 
+    # Load marks for mark filter
+    marks = {}
+    if mark:
+        marks_key = f"{prefix}/marks/{subdir_part}marks.json"
+        try:
+            marks = bos_read_json(bucket, marks_key)
+        except Exception:
+            marks = {}
+
     # Filter by search first (cheap, no BOS calls)
     if search:
         case_ids = [cid for cid in case_ids if search.lower() in cid.lower()]
 
+    # Filter by mark
+    if mark:
+        if mark == "agree":
+            case_ids = [cid for cid in case_ids if marks.get(cid) == "agree"]
+        elif mark == "disagree":
+            case_ids = [cid for cid in case_ids if marks.get(cid) == "disagree"]
+        elif mark == "unmarked":
+            case_ids = [cid for cid in case_ids if cid not in marks or not marks.get(cid)]
+
     total_all = len(case_ids)
 
-    # If grade filter is set, we need to read JSONs to filter
-    # For performance, only read the minimal window needed
-    if grade:
+    # If grade or score filter is set, use cached metadata for filtering
+    if grade or score_min is not None or score_max is not None:
         filtered = []
         for case_id in case_ids:
-            try:
-                score_data = bos_read_json(bucket, f"{prefix}/output/{subdir_part}{case_id}.json")
-                if score_data.get("grade") == grade:
-                    filtered.append(case_id)
-            except Exception:
+            meta = get_case_metadata(bucket, prefix, subdir, case_id)
+            if grade and meta["grade"] != grade:
                 continue
+            if score_min is not None and meta["score"] < score_min:
+                continue
+            if score_max is not None and meta["score"] > score_max:
+                continue
+            filtered.append(case_id)
         case_ids = filtered
+    else:
+        # No filter needed
+        pass
 
     total_filtered = len(case_ids)
 
@@ -440,6 +529,8 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
             <option value="medium">Medium</option>
             <option value="bad">Bad</option>
         </select>
+        <input id="score-min" type="number" min="0" max="100" placeholder="Min" style="width:60px; padding:4px; background:#0f3460; color:#eee; border:1px solid #333; border-radius:3px; text-align:center;" title="Min Score">
+        <input id="score-max" type="number" min="0" max="100" placeholder="Max" style="width:60px; padding:4px; background:#0f3460; color:#eee; border:1px solid #333; border-radius:3px; text-align:center;" title="Max Score">
         <select id="mark-filter">
             <option value="">All marks</option>
             <option value="agree">✓ Agree</option>
@@ -559,29 +650,24 @@ async function loadCases() {{
     const grade = document.getElementById('grade-filter').value;
     const search = document.getElementById('search').value;
     const markFilter = document.getElementById('mark-filter').value;
+    const scoreMin = document.getElementById('score-min').value;
+    const scoreMax = document.getElementById('score-max').value;
     let url = `/api/cases?bucket=${{BUCKET}}&prefix=${{PREFIX}}&subdir=${{SUBDIR}}&page=${{page}}&page_size=${{PAGE_SIZE}}`;
     if (grade) url += `&grade=${{grade}}`;
     if (search) url += `&search=${{encodeURIComponent(search)}}`;
+    if (scoreMin) url += `&score_min=${{scoreMin}}`;
+    if (scoreMax) url += `&score_max=${{scoreMax}}`;
+    if (markFilter) url += `&mark=${{markFilter}}`;
 
     document.getElementById('grid').innerHTML = '<div class="loading">Loading...</div>';
     const resp = await fetch(url);
     const data = await resp.json();
 
-    // Apply mark filter client-side (marks are local)
-    if (markFilter === 'agree') {{
-        allCases = data.cases.filter(c => marks[c.case_id] === 'agree');
-    }} else if (markFilter === 'disagree') {{
-        allCases = data.cases.filter(c => marks[c.case_id] === 'disagree');
-    }} else if (markFilter === 'unmarked') {{
-        allCases = data.cases.filter(c => !marks[c.case_id]);
-    }} else {{
-        allCases = data.cases;
-    }}
-
+    allCases = data.cases;
     totalCases = data.total;
     totalPages = Math.ceil(data.total / PAGE_SIZE);
 
-    document.getElementById('stats').textContent = `${{data.total}} cases (showing ${{allCases.length}})`;
+    document.getElementById('stats').textContent = `${{data.total}} cases`;
     document.getElementById('page-info').textContent = `${{page + 1}} / ${{totalPages}}`;
     renderPage();
 }}
@@ -697,6 +783,8 @@ document.getElementById('search').addEventListener('input', () => {{
 }});
 document.getElementById('grade-filter').addEventListener('change', () => {{ page = 0; loadCases(); }});
 document.getElementById('mark-filter').addEventListener('change', () => {{ page = 0; loadCases(); }});
+document.getElementById('score-min').addEventListener('change', () => {{ page = 0; loadCases(); }});
+document.getElementById('score-max').addEventListener('change', () => {{ page = 0; loadCases(); }});
 document.getElementById('page-jump').addEventListener('keydown', e => {{
     if (e.key === 'Enter') {{ e.preventDefault(); jumpToPage(); }}
 }});

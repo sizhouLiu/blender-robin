@@ -116,6 +116,7 @@ def save_config(cfg):
 
 
 MAIN_MENU = [
+    ("一键渲染+打分流水线", "pipeline"),
     ("渲染图片", "render"),
     ("上传渲染结果到 BOS", "upload_bos"),
     ("查看评分结果", "view_scores"),
@@ -1018,6 +1019,147 @@ def upload_output_to_bos(output_dir: Path, model_dir: Path, bucket: str, prefix:
     return uploaded, failed
 
 
+# ============================================================================
+# 渲染类型 → 打分脚本映射
+# ============================================================================
+
+RENDER_TO_SCORE_MAP = {
+    "uv_check": ["表面规整度.py"],
+    "rgb_closeup": ["细节丰富度.py", "纹理精细度.py"],
+    "normal_map": ["表面完备度.py", "形体结构精度.py"],
+    "wireframe": ["拓扑合理度.py"],
+}
+
+
+def do_pipeline(blender, directory, res, cfg, recursive=False):
+    """一键渲染 + 上传 + 打分流水线。"""
+    print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
+    print(f"  {WHITE}一键渲染+打分流水线{RESET}")
+    print(f"{BOLD}{CYAN}{'─' * 40}{RESET}\n")
+
+    # 1. 选择要执行的渲染类型
+    render_options = [
+        ("UV 棋盘格检查 → 表面规整度", "uv_check", "uv-check"),
+        ("RGB 全身+特写 → 细节丰富度, 纹理精细度", "rgb_closeup", "rgb-closeup"),
+        ("法线图 → 表面完备度, 形体结构精度", "normal_map", "normal-map"),
+        ("线框图 → 拓扑合理度", "wireframe", "wireframe"),
+    ]
+
+    display_options = [(label, key) for label, key, _ in render_options] + [("← 返回", None)]
+    selected_indices = []
+
+    print(f"  {CYAN}选择要执行的渲染+打分 (可多选，逐个选择后按 Enter){RESET}\n")
+    while True:
+        remaining = [(label, key) for label, key, _ in render_options if key not in selected_indices]
+        if not remaining:
+            break
+        remaining.append(("开始执行", "start"))
+        remaining.append(("← 取消", None))
+
+        selected_labels = [label for label, key, _ in render_options if key in selected_indices]
+        if selected_labels:
+            print(f"  {GREEN}已选: {', '.join(selected_labels)}{RESET}")
+
+        idx = select_menu("添加渲染类型:", remaining)
+        if idx < 0 or remaining[idx][1] is None:
+            return
+        if remaining[idx][1] == "start":
+            break
+        selected_indices.append(remaining[idx][1])
+
+    if not selected_indices:
+        print(f"  {YELLOW}未选择任何渲染类型{RESET}\n")
+        return
+
+    # 确认 BOS 配置
+    bucket = cfg.get("bos_upload_bucket", "").strip()
+    prefix = cfg.get("bos_upload_prefix", "robin_renders").strip().rstrip("/")
+    env_path = cfg.get("bos_env_path", "") or str(Path(__file__).parent / ".env")
+
+    if not bucket:
+        sys.stdout.write(f"\n  {CYAN}BOS Bucket (上传渲染结果用): {RESET}")
+        sys.stdout.flush()
+        bucket = input().strip()
+        if not bucket:
+            print(f"  {YELLOW}未输入 bucket，取消{RESET}\n")
+            return
+        cfg["bos_upload_bucket"] = bucket
+
+    print(f"\n  {DIM}流水线配置:{RESET}")
+    print(f"    Bucket: {WHITE}{bucket}{RESET}")
+    print(f"    Prefix: {WHITE}{prefix}{RESET}")
+    print(f"    渲染类型: {WHITE}{', '.join(selected_indices)}{RESET}")
+    score_scripts = []
+    for key in selected_indices:
+        score_scripts.extend(RENDER_TO_SCORE_MAP.get(key, []))
+    print(f"    打分脚本: {WHITE}{', '.join(score_scripts)}{RESET}\n")
+
+    # 2. 逐个渲染类型执行: 渲染 → 上传 → 打分
+    base_output = directory / "robin_output"
+
+    for render_key in selected_indices:
+        render_cmd = next(cmd for _, key, cmd in render_options if key == render_key)
+        folder = render_key
+        output_dir = base_output / folder
+
+        print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
+        print(f"  {WHITE}▶ 渲染: {render_key}{RESET}")
+        print(f"{BOLD}{CYAN}{'─' * 40}{RESET}")
+
+        # 渲染
+        run_render(render_cmd, directory, output_dir, res, blender, cfg, recursive=recursive)
+
+        # 上传
+        print(f"\n  {DIM}上传 {render_key} 到 BOS...{RESET}")
+        upload_output_to_bos(
+            output_dir=output_dir,
+            model_dir=directory,
+            bucket=bucket,
+            prefix=f"{prefix}/{folder}",
+            env_path=env_path,
+            delete_local=False,
+            recursive=recursive,
+        )
+
+        # 打分
+        scripts = RENDER_TO_SCORE_MAP.get(render_key, [])
+        if scripts:
+            from blender_robin import bos_fetch
+            bos_fetch.load_bos_env(env_path)
+
+            for script_name in scripts:
+                script_path = Path(__file__).parent / script_name
+                if not script_path.exists():
+                    print(f"  {YELLOW}打分脚本不存在: {script_name}{RESET}")
+                    continue
+                print(f"\n  {WHITE}▶ 打分: {script_name}{RESET}")
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, str(script_path)],
+                    cwd=str(Path(__file__).parent),
+                )
+                if result.returncode == 0:
+                    print(f"  {GREEN}✓ {script_name} 完成{RESET}")
+                else:
+                    print(f"  {YELLOW}✗ {script_name} 失败 (exit {result.returncode}){RESET}")
+
+    # 3. 完成
+    print(f"\n{BOLD}{CYAN}{'─' * 40}{RESET}")
+    print(f"  {GREEN}流水线完成!{RESET}")
+    print(f"  渲染类型: {', '.join(selected_indices)}")
+    print(f"  打分脚本: {', '.join(score_scripts)}")
+    print(f"{BOLD}{CYAN}{'─' * 40}{RESET}\n")
+
+    # 4. 询问是否打开查看器
+    after_options = [
+        ("打开评分查看器", "view"),
+        ("返回主菜单", "back"),
+    ]
+    idx = select_menu("下一步:", after_options)
+    if idx >= 0 and after_options[idx][1] == "view":
+        do_view_scores(cfg)
+
+
 def do_view_scores(cfg):
     """启动评分结果可视化查看器（Web UI）。"""
     print(f"\n  {WHITE}查看 BOS 上的评分结果{RESET}\n")
@@ -1350,7 +1492,10 @@ def main():
         if idx < 0:
             return
         _, action = MAIN_MENU[idx]
-        if action == "render":
+        if action == "pipeline":
+            print()
+            do_pipeline(blender, directory, res, cfg)
+        elif action == "render":
             print()
             do_render(blender, directory, res, cfg)
         elif action == "upload_bos":
