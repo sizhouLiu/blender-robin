@@ -505,6 +505,14 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
 .grade-medium {{ background: #e65100; color: #ffcc80; }}
 .grade-bad {{ background: #b71c1c; color: #ef9a9a; }}
 .issues {{ font-size: 10px; color: #ef9a9a; margin-top: 4px; max-height: 32px; overflow: hidden; }}
+.card-confidence {{ font-size: 11px; color: #aaa; margin-top: 4px; }}
+.card-reason {{ font-size: 11px; color: #ccc; margin-top: 4px; line-height: 1.4; }}
+.card-tags {{ margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }}
+.tag-group {{ display: inline-flex; align-items: center; gap: 2px; }}
+.tag-label {{ font-size: 9px; color: #888; background: #0f3460; padding: 2px 4px; border-radius: 2px; }}
+.tag-item {{ font-size: 10px; color: #4fc3f7; background: #1a3a5c; padding: 2px 5px; border-radius: 2px; }}
+.card-eval {{ font-size: 9px; color: #666; margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }}
+.eval-item {{ background: #0a1a2e; padding: 2px 5px; border-radius: 2px; }}
 .nav {{ display: flex; gap: 8px; padding: 16px; justify-content: center; position: sticky; bottom: 0; background: #1a1a2e; }}
 .nav button {{ padding: 8px 16px; background: #0f3460; color: #eee; border: 1px solid #333; border-radius: 4px; cursor: pointer; }}
 .nav button:hover {{ background: #4fc3f7; color: #000; }}
@@ -597,20 +605,41 @@ let page = 0;
 let searchTimeout = null;
 
 function formatSubScores(c) {{
-    const excludeKeys = ['score', 'grade', 'issues', 'case_id', 'images'];
+    const excludeKeys = ['score', 'grade', 'issues', 'case_id', 'images', 'tags', 'evaluation_metadata', 'tag_confidence', 'tag_reason'];
     const parts = [];
     for (const [key, val] of Object.entries(c)) {{
         if (excludeKeys.includes(key)) continue;
         if (key.endsWith('_score')) {{
-            // Score fields: show as "key: value"
             const label = key.replace('_score', '');
             parts.push(`${{label}}: ${{val || 0}}`);
         }} else {{
-            // Metadata fields: show as "value" only
-            if (val) parts.push(String(val));
+            if (val == null || typeof val === 'object') continue;
+            parts.push(String(val));
         }}
     }}
     return parts.join(' | ');
+}}
+
+function formatTags(tags) {{
+    if (!tags || typeof tags !== 'object') return '';
+    const parts = [];
+    for (const [key, val] of Object.entries(tags)) {{
+        if (Array.isArray(val)) {{
+            parts.push(`<span class="tag-group"><span class="tag-label">${{key}}</span>${{val.map(v => `<span class="tag-item">${{v}}</span>`).join('')}}</span>`);
+        }} else {{
+            parts.push(`<span class="tag-group"><span class="tag-label">${{key}}</span><span class="tag-item">${{val}}</span></span>`);
+        }}
+    }}
+    return parts.join('');
+}}
+
+function formatEvalMeta(meta) {{
+    if (!meta || typeof meta !== 'object') return '';
+    const parts = [];
+    if (meta.model) parts.push(`<span class="eval-item">模型: ${{meta.model}}</span>`);
+    if (meta.prompt_version) parts.push(`<span class="eval-item">prompt: ${{meta.prompt_version.substring(0, 16)}}</span>`);
+    if (meta.evaluated_at) parts.push(`<span class="eval-item">${{new Date(meta.evaluated_at).toLocaleString()}}</span>`);
+    return parts.join('');
 }}
 
 async function loadMarks() {{
@@ -694,6 +723,11 @@ function renderPage() {{
             </div>
         `;
 
+        const tagsHtml = formatTags(c.tags);
+        const evalHtml = formatEvalMeta(c.evaluation_metadata);
+        const confidence = c.tag_confidence != null ? `<div class="card-confidence">置信度: <span style="color:${{c.tag_confidence >= 0.8 ? '#a5d6a7' : c.tag_confidence >= 0.5 ? '#ffcc80' : '#ef9a9a'}}">${{c.tag_confidence}}</span></div>` : '';
+        const reason = c.tag_reason ? `<div class="card-reason">${{c.tag_reason}}</div>` : '';
+
         return `<div class="card">
             <div class="card-images">${{imgsHtml}}</div>
             <div class="card-body">
@@ -702,6 +736,10 @@ function renderPage() {{
                     <span class="grade ${{gradeClass}}">${{c.grade || '?'}}</span>
                 </div>
                 <div class="card-meta">${{formatSubScores(c)}}</div>
+                ${{confidence}}
+                ${{reason}}
+                ${{tagsHtml ? `<div class="card-tags">${{tagsHtml}}</div>` : ''}}
+                ${{evalHtml ? `<div class="card-eval">${{evalHtml}}</div>` : ''}}
                 ${{issues ? `<div class="issues">${{issues}}</div>` : ''}}
                 ${{markBtns}}
             </div>
